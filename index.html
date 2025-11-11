@@ -63,6 +63,9 @@
             <button id="firing-speed-btn">Firing Speed (50 pts)</button>
             <button id="health-btn">Health (100 pts)</button>
             <button id="movement-speed-btn">Movement Speed (75 pts)</button>
+            <button id="bullet-speed-btn">Bullet Speed (80 pts)</button>
+            <button id="shield-btn">Shield (150 pts)</button>
+            <button id="multi-shot-btn">Multi-Shot (200 pts)</button>
         </div>
         <button id="close-upgrade">Close</button>
     </div>
@@ -88,12 +91,22 @@
         let firingSpeedLevel = 0;
         let healthLevel = 0;
         let movementSpeedLevel = 0;
+        let bulletSpeedLevel = 0;
+        let shieldLevel = 0;
+        let multiShotLevel = 0;
         let totalUpgrades = 0;
+
+        // Shield variables
+        let shieldActive = false;
+        let shieldEndTime = 0;
 
         // Upgrade costs
         const firingSpeedCost = 50;
         const healthCost = 100;
         const movementSpeedCost = 75;
+        const bulletSpeedCost = 80;
+        const shieldCost = 150;
+        const multiShotCost = 200;
 
         // Player spaceship
         const player = {
@@ -104,6 +117,9 @@
             speed: 5,
             color: '#00FF00'
         };
+
+        // Base bullet speed
+        let baseBulletSpeed = 7;
 
         // Bullets
         let bullets = [];
@@ -120,6 +136,10 @@
         // Event listeners
         document.addEventListener('keydown', (e) => {
             keys[e.code] = true;
+            if (e.code === 'KeyM') {
+                upgradeMenu.style.display = 'block';
+                gameRunning = false;
+            }
         });
 
         document.addEventListener('keyup', (e) => {
@@ -134,6 +154,9 @@
         const firingSpeedBtn = document.getElementById('firing-speed-btn');
         const healthBtn = document.getElementById('health-btn');
         const movementSpeedBtn = document.getElementById('movement-speed-btn');
+        const bulletSpeedBtn = document.getElementById('bullet-speed-btn');
+        const shieldBtn = document.getElementById('shield-btn');
+        const multiShotBtn = document.getElementById('multi-shot-btn');
 
         upgradeBtn.addEventListener('click', () => {
             upgradeMenu.style.display = 'block';
@@ -187,6 +210,49 @@
             }
         });
 
+        bulletSpeedBtn.addEventListener('click', () => {
+            if (score >= bulletSpeedCost) {
+                score -= bulletSpeedCost;
+                bulletSpeedLevel++;
+                totalUpgrades++;
+                // Increase base bullet speed for future bullets
+                baseBulletSpeed += 1;
+                scoreEl.textContent = score;
+                upgradeMenu.style.display = 'none';
+                gameRunning = true;
+                gameLoop();
+            }
+        });
+
+        shieldBtn.addEventListener('click', () => {
+            if (score >= shieldCost) {
+                score -= shieldCost;
+                shieldLevel++;
+                totalUpgrades++;
+                // Activate temporary shield (5 seconds of invincibility)
+                shieldActive = true;
+                shieldEndTime = Date.now() + 5000; // 5 seconds from now
+                scoreEl.textContent = score;
+                upgradeMenu.style.display = 'none';
+                gameRunning = true;
+                gameLoop();
+            }
+        });
+
+        multiShotBtn.addEventListener('click', () => {
+            if (score >= multiShotCost) {
+                score -= multiShotCost;
+                multiShotLevel++;
+                totalUpgrades++;
+                // Multi-shot: fire 3 bullets
+                // Modify shooting logic to fire multiple
+                scoreEl.textContent = score;
+                upgradeMenu.style.display = 'none';
+                gameRunning = true;
+                gameLoop();
+            }
+        });
+
         function restartGame() {
             score = 0;
             lives = maxLives;
@@ -196,6 +262,8 @@
             enemyBullets = [];
             player.x = canvas.width / 2 - 25;
             player.y = canvas.height - 60;
+            shieldActive = false;
+            shieldEndTime = 0;
             gameRunning = true;
             gameOverEl.style.display = 'none';
             restartBtn.style.display = 'none';
@@ -203,6 +271,12 @@
         }
 
         function update() {
+            // Update shield status
+            const currentTime = Date.now();
+            if (shieldActive && currentTime > shieldEndTime) {
+                shieldActive = false;
+            }
+
             // Player movement
             if (keys['ArrowLeft'] || keys['KeyA']) {
                 player.x -= player.speed;
@@ -222,16 +296,43 @@
             player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
 
             // Shoot bullets with cooldown
-            const currentTime = Date.now();
             if (keys['Space'] && currentTime - lastShotTime > bulletCooldown) {
-                bullets.push({
-                    x: player.x + player.width / 2 - 2,
-                    y: player.y,
-                    width: 4,
-                    height: 10,
-                    speed: 7,
-                    color: '#FFFF00'
-                });
+                if (multiShotLevel > 0) {
+                    // Multi-shot: fire 3 bullets
+                    bullets.push({
+                        x: player.x + player.width / 2 - 2 - 10,
+                        y: player.y,
+                        width: 4,
+                        height: 10,
+                        speed: baseBulletSpeed,
+                        color: '#FFFF00'
+                    });
+                    bullets.push({
+                        x: player.x + player.width / 2 - 2,
+                        y: player.y,
+                        width: 4,
+                        height: 10,
+                        speed: baseBulletSpeed,
+                        color: '#FFFF00'
+                    });
+                    bullets.push({
+                        x: player.x + player.width / 2 - 2 + 10,
+                        y: player.y,
+                        width: 4,
+                        height: 10,
+                        speed: baseBulletSpeed,
+                        color: '#FFFF00'
+                    });
+                } else {
+                    bullets.push({
+                        x: player.x + player.width / 2 - 2,
+                        y: player.y,
+                        width: 4,
+                        height: 10,
+                        speed: baseBulletSpeed,
+                        color: '#FFFF00'
+                    });
+                }
                 lastShotTime = currentTime;
             }
 
@@ -243,6 +344,7 @@
 
             // Spawn enemies
             if (Math.random() < 0.02) {
+                const type = Math.random() < 0.1 ? 'special' : 'normal';
                 enemies.push({
                     x: Math.random() * (canvas.width - 40),
                     y: -40,
@@ -250,7 +352,8 @@
                     height: 40,
                     speed: 2 + Math.random() * 2,
                     color: '#FF0000',
-                    lastShotTime: 0
+                    lastShotTime: 0,
+                    type: type
                 });
             }
 
@@ -291,47 +394,52 @@
                         // Hit!
                         bullets.splice(bIndex, 1);
                         enemies.splice(eIndex, 1);
-                        score += 10;
+                        const points = enemy.type === 'special' ? 100 : 25;
+                        score += points;
                         scoreEl.textContent = score;
                     }
                 });
             });
 
             // Check player-enemy collisions
-            enemies.forEach((enemy, eIndex) => {
-                if (player.x < enemy.x + enemy.width &&
-                    player.x + player.width > enemy.x &&
-                    player.y < enemy.y + enemy.height &&
-                    player.y + player.height > enemy.y) {
-                    // Hit!
-                    enemies.splice(eIndex, 1);
-                    lives--;
-                    livesEl.innerHTML = '♥'.repeat(lives);
-                    if (lives <= 0) {
-                        gameRunning = false;
-                        gameOverEl.style.display = 'block';
-                        restartBtn.style.display = 'block';
+            if (!shieldActive) {
+                enemies.forEach((enemy, eIndex) => {
+                    if (player.x < enemy.x + enemy.width &&
+                        player.x + player.width > enemy.x &&
+                        player.y < enemy.y + enemy.height &&
+                        player.y + player.height > enemy.y) {
+                        // Hit!
+                        enemies.splice(eIndex, 1);
+                        lives--;
+                        livesEl.innerHTML = '♥'.repeat(lives);
+                        if (lives <= 0) {
+                            gameRunning = false;
+                            gameOverEl.style.display = 'block';
+                            restartBtn.style.display = 'block';
+                        }
                     }
-                }
-            });
+                });
+            }
 
             // Check player-enemy bullet collisions
-            enemyBullets.forEach((bullet, bIndex) => {
-                if (player.x < bullet.x + bullet.width &&
-                    player.x + player.width > bullet.x &&
-                    player.y < bullet.y + bullet.height &&
-                    player.y + player.height > bullet.y) {
-                    // Hit!
-                    enemyBullets.splice(bIndex, 1);
-                    lives--;
-                    livesEl.innerHTML = '♥'.repeat(lives);
-                    if (lives <= 0) {
-                        gameRunning = false;
-                        gameOverEl.style.display = 'block';
-                        restartBtn.style.display = 'block';
+            if (!shieldActive) {
+                enemyBullets.forEach((bullet, bIndex) => {
+                    if (player.x < bullet.x + bullet.width &&
+                        player.x + player.width > bullet.x &&
+                        player.y < bullet.y + bullet.height &&
+                        player.y + player.height > bullet.y) {
+                        // Hit!
+                        enemyBullets.splice(bIndex, 1);
+                        lives--;
+                        livesEl.innerHTML = '♥'.repeat(lives);
+                        if (lives <= 0) {
+                            gameRunning = false;
+                            gameOverEl.style.display = 'block';
+                            restartBtn.style.display = 'block';
+                        }
                     }
-                }
-            });
+                });
+            }
         }
 
         function draw() {
@@ -345,6 +453,15 @@
                 const x = (i * 37) % canvas.width;
                 const y = (i * 23) % canvas.height;
                 ctx.fillRect(x, y, 1, 1);
+            }
+
+            // Draw shield if active
+            if (shieldActive) {
+                ctx.strokeStyle = '#00FFFF'; // Cyan color for shield
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(player.x + player.width / 2, player.y + player.height / 2, player.width / 2 + 10, 0, Math.PI * 2);
+                ctx.stroke();
             }
 
             // Draw player spaceship with steely blue gradient
@@ -378,46 +495,69 @@
                 const centerY = enemy.y + enemy.height / 2;
                 const radius = enemy.width / 2;
 
-                // Draw head (circle)
-                ctx.fillStyle = '#00FF00'; // Green for alien
-                ctx.beginPath();
-                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-                ctx.fill();
+                if (enemy.type === 'special') {
+                    // Special enemy: Draw as a square with spikes
+                    ctx.fillStyle = '#FF00FF'; // Magenta for special enemy
+                    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
 
-                // Draw eyes
-                ctx.fillStyle = '#FFFFFF';
-                ctx.beginPath();
-                ctx.arc(centerX - radius * 0.3, centerY - radius * 0.2, radius * 0.15, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(centerX + radius * 0.3, centerY - radius * 0.2, radius * 0.15, 0, Math.PI * 2);
-                ctx.fill();
+                    // Draw spikes
+                    ctx.strokeStyle = '#FF00FF';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY - radius);
+                    ctx.lineTo(centerX - radius * 0.5, centerY - radius * 1.5);
+                    ctx.moveTo(centerX, centerY - radius);
+                    ctx.lineTo(centerX + radius * 0.5, centerY - radius * 1.5);
+                    ctx.moveTo(centerX - radius, centerY);
+                    ctx.lineTo(centerX - radius * 1.5, centerY);
+                    ctx.moveTo(centerX + radius, centerY);
+                    ctx.lineTo(centerX + radius * 1.5, centerY);
+                    ctx.moveTo(centerX, centerY + radius);
+                    ctx.lineTo(centerX, centerY + radius * 1.5);
+                    ctx.stroke();
+                } else {
+                    // Normal enemy: Draw as alien
+                    // Draw head (circle)
+                    ctx.fillStyle = '#00FF00'; // Green for alien
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                    ctx.fill();
 
-                // Draw pupils
-                ctx.fillStyle = '#000000';
-                ctx.beginPath();
-                ctx.arc(centerX - radius * 0.3, centerY - radius * 0.2, radius * 0.07, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(centerX + radius * 0.3, centerY - radius * 0.2, radius * 0.07, 0, Math.PI * 2);
-                ctx.fill();
+                    // Draw eyes
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.beginPath();
+                    ctx.arc(centerX - radius * 0.3, centerY - radius * 0.2, radius * 0.15, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(centerX + radius * 0.3, centerY - radius * 0.2, radius * 0.15, 0, Math.PI * 2);
+                    ctx.fill();
 
-                // Draw mouth
-                ctx.strokeStyle = '#000000';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(centerX, centerY + radius * 0.2, radius * 0.2, 0, Math.PI);
-                ctx.stroke();
+                    // Draw pupils
+                    ctx.fillStyle = '#000000';
+                    ctx.beginPath();
+                    ctx.arc(centerX - radius * 0.3, centerY - radius * 0.2, radius * 0.07, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(centerX + radius * 0.3, centerY - radius * 0.2, radius * 0.07, 0, Math.PI * 2);
+                    ctx.fill();
 
-                // Draw antennae
-                ctx.strokeStyle = '#00FF00';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.moveTo(centerX - radius * 0.5, centerY - radius);
-                ctx.lineTo(centerX - radius * 0.7, centerY - radius * 1.3);
-                ctx.moveTo(centerX + radius * 0.5, centerY - radius);
-                ctx.lineTo(centerX + radius * 0.7, centerY - radius * 1.3);
-                ctx.stroke();
+                    // Draw mouth
+                    ctx.strokeStyle = '#000000';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY + radius * 0.2, radius * 0.2, 0, Math.PI);
+                    ctx.stroke();
+
+                    // Draw antennae
+                    ctx.strokeStyle = '#00FF00';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX - radius * 0.5, centerY - radius);
+                    ctx.lineTo(centerX - radius * 0.7, centerY - radius * 1.3);
+                    ctx.moveTo(centerX + radius * 0.5, centerY - radius);
+                    ctx.lineTo(centerX + radius * 0.7, centerY - radius * 1.3);
+                    ctx.stroke();
+                }
             });
         }
 
