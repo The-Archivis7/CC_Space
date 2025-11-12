@@ -133,6 +133,12 @@
         // Keys
         let keys = {};
 
+        // --- Boss Variables ---
+        let boss = null;
+        let gameStartTime = Date.now();
+        const bossSpawnTime = 300000; // 5 minutes in milliseconds
+        let bossSpawned = false;
+
         // Event listeners
         document.addEventListener('keydown', (e) => {
             keys[e.code] = true;
@@ -267,12 +273,126 @@
             gameRunning = true;
             gameOverEl.style.display = 'none';
             restartBtn.style.display = 'none';
+
+            // --- Reset Boss Variables ---
+            boss = null;
+            bossSpawned = false;
+            gameStartTime = Date.now();
+
             gameLoop();
         }
 
-        function update() {
-            // Update shield status
+        // --- Boss Functions ---
+        function spawnBoss() {
+            // Clear screen for boss
+            enemies = [];
+            enemyBullets = [];
+
+            boss = {
+                x: canvas.width / 2 - 100,
+                y: 50,
+                width: 200,
+                height: 100,
+                health: 2000,
+                maxHealth: 2000,
+                color: '#8B0000', // Dark red
+                originalColor: '#8B0000',
+                attackPattern: 'spread',
+                lastAttackTime: Date.now(),
+                attackCooldown: 1000, // 2 seconds
+                attackPhaseTimer: 0
+            };
+        }
+
+        function updateBoss() {
+            if (!boss) return;
+
             const currentTime = Date.now();
+
+            // Boss Attack Logic
+            if (currentTime - boss.lastAttackTime > boss.attackCooldown) {
+                
+                switch (boss.attackPattern) {
+                    case 'spread':
+                        // Fire a 5-shot spread
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, 0, 5);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, -1.5, 4.5);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, 1.5, 4.5);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, -3, 4);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, 3, 4);
+                        
+                        boss.attackPhaseTimer++;
+                        
+                        // After 3 spreads, pause
+                        if (boss.attackPhaseTimer > 3) {
+                            boss.attackPattern = 'pause';
+                            boss.attackPhaseTimer = 0;
+                            boss.attackCooldown = 3000; // 3 second pause
+                        } else {
+                           boss.attackCooldown = 1000; // 1 second between spreads
+                        }
+                        break;
+                    
+                    case 'pause':
+                        // Do nothing, just wait
+                        boss.attackPattern = 'spread2';
+                        boss.attackCooldown = 2000; // 2 seconds until next attack
+                        break;
+                    case 'spread2':
+                        // Fire a 10-shot spread
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, 0, 5);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, -1.5, 4.5);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, 1.5, 4.5);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, -3, 4);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, 3, 4);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, 1, 5);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, -2.5, 4.5);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, 2.5, 4.5);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, -2, 4);
+                        bossFireBullet(boss.x + boss.width / 2, boss.y + boss.height, 2, 4);
+                        boss.attackPhaseTimer++;
+                        
+                        // After 6 spreads, pause
+                        if (boss.attackPhaseTimer > 6) {
+                            boss.attackPattern = 'pause2';
+                            boss.attackPhaseTimer = 0;
+                            boss.attackCooldown = 3000; // 3 second pause
+                        } else {
+                           boss.attackCooldown = 1000; // 1 second between spreads
+                        }
+                        break;
+                    case 'pause2':
+                        // Do nothing, just wait
+                        boss.attackPattern = 'spread';
+                        boss.attackCooldown = 2000; // 2 seconds until next attack
+                        break;
+                }
+                
+                boss.lastAttackTime = currentTime;
+            }
+        }
+
+        function bossFireBullet(x, y, velX, velY) {
+            enemyBullets.push({
+                x: x - 5,
+                y: y,
+                width: 10,
+                height: 10,
+                velX: velX,
+                velY: velY,
+                color: '#FFA500' // Orange
+            });
+        }
+
+        function update() {
+            // --- Boss Spawn Check ---
+            const currentTime = Date.now();
+            if (!boss && !bossSpawned && gameRunning && (currentTime - gameStartTime > bossSpawnTime)) {
+                spawnBoss();
+                bossSpawned = true;
+            }
+
+            // Update shield status
             if (shieldActive && currentTime > shieldEndTime) {
                 shieldActive = false;
             }
@@ -342,8 +462,8 @@
                 return bullet.y > 0;
             });
 
-            // Spawn enemies
-            if (Math.random() < 0.02) {
+            // Spawn enemies (ONLY if boss is not active)
+            if (!boss && Math.random() < 0.02) {
                 const type = Math.random() < 0.1 ? 'special' : 'normal';
                 enemies.push({
                     x: Math.random() * (canvas.width - 40),
@@ -370,7 +490,9 @@
                         width: 4,
                         height: 10,
                         speed: 4,
-                        color: '#FF0000'
+                        color: '#FF0000',
+                        velX: 0,
+                        velY: 4
                     });
                     enemy.lastShotTime = currentTime;
                 }
@@ -378,14 +500,21 @@
                 return enemy.y < canvas.height;
             });
 
-            // Update enemy bullets
+            // --- Update Boss ---
+            if (boss) {
+                updateBoss();
+            }
+
+            // Update enemy bullets (handles both enemy and boss bullets)
             enemyBullets = enemyBullets.filter(bullet => {
-                bullet.y += bullet.speed;
-                return bullet.y < canvas.height;
+                bullet.x += bullet.velX || 0;
+                bullet.y += bullet.velY || bullet.speed; // Use velY if present, else fallback to speed
+                return bullet.y < canvas.height && bullet.y > -bullet.height && bullet.x > -bullet.width && bullet.x < canvas.width;
             });
 
             // Check collisions
             bullets.forEach((bullet, bIndex) => {
+                // Check bullet-enemy collision
                 enemies.forEach((enemy, eIndex) => {
                     if (bullet.x < enemy.x + enemy.width &&
                         bullet.x + bullet.width > enemy.x &&
@@ -399,6 +528,29 @@
                         scoreEl.textContent = score;
                     }
                 });
+
+                // --- Check bullet-boss collision ---
+                if (boss && bullet.x < boss.x + boss.width &&
+                    bullet.x + bullet.width > boss.x &&
+                    bullet.y < boss.y + boss.height &&
+                    bullet.y + bullet.height > boss.y) {
+                    
+                    bullets.splice(bIndex, 1);
+                    boss.health--;
+                    
+                    // Flash white on hit
+                    boss.color = '#FFFFFF';
+                    setTimeout(() => {
+                        if (boss) boss.color = boss.originalColor;
+                    }, 50);
+
+                    if (boss.health <= 0) {
+                        score += 5000; // Boss reward
+                        scoreEl.textContent = score;
+                        boss = null;
+                        // You could add an explosion effect here
+                    }
+                }
             });
 
             // Check player-enemy collisions
@@ -419,6 +571,26 @@
                         }
                     }
                 });
+
+                // --- Check player-boss collision ---
+                if (boss && player.x < boss.x + boss.width &&
+                    player.x + player.width > boss.x &&
+                    player.y < boss.y + boss.height &&
+                    player.y + player.height > boss.y) {
+                    
+                    lives--;
+                    livesEl.innerHTML = '♥'.repeat(lives);
+                    if (lives <= 0) {
+                        gameRunning = false;
+                        gameOverEl.style.display = 'block';
+                        restartBtn.style.display = 'block';
+                    } else {
+                        // To prevent instant death, bounce player away
+                        player.y = boss.y + boss.height + 20;
+                        shieldActive = true; // Give brief invincibility
+                        shieldEndTime = Date.now() + 1000;
+                    }
+                }
             }
 
             // Check player-enemy bullet collisions
@@ -484,8 +656,8 @@
             });
 
             // Draw enemy bullets
-            ctx.fillStyle = '#FF0000';
             enemyBullets.forEach(bullet => {
+                ctx.fillStyle = bullet.color; // Use bullet's color
                 ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
             });
 
@@ -559,6 +731,28 @@
                     ctx.stroke();
                 }
             });
+
+            // --- Draw Boss ---
+            if (boss) {
+                // Draw boss body
+                ctx.fillStyle = boss.color;
+                ctx.fillRect(boss.x, boss.y, boss.width, boss.height);
+                
+                // Draw "eyes"
+                ctx.fillStyle = '#FFFF00';
+                ctx.fillRect(boss.x + 30, boss.y + 20, 40, 30);
+                ctx.fillRect(boss.x + boss.width - 70, boss.y + 20, 40, 30);
+
+                // Draw Health Bar
+                const healthBarY = boss.y - 20;
+                // Background
+                ctx.fillStyle = '#555555';
+                ctx.fillRect(boss.x, healthBarY, boss.width, 10);
+                // Health
+                const healthPercent = boss.health / boss.maxHealth;
+                ctx.fillStyle = '#FF0000';
+                ctx.fillRect(boss.x, healthBarY, boss.width * healthPercent, 10);
+            }
         }
 
         function gameLoop() {
