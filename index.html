@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Space Adventure Game</title>
+    <title>Space Adventure - WebGL Bloom Edition</title>
     <style>
         :root {
             --primary: #4CAF50;
             --primary-hover: #45a049;
             --accent: #00e5ff;
             --danger: #ff5252;
-            --bg-glass: rgba(16, 24, 48, 0.85);
+            --bg-glass: rgba(10, 15, 30, 0.88);
         }
 
         * {
@@ -21,7 +21,7 @@
         body {
             margin: 0;
             padding: 0;
-            background: #030712;
+            background: #02040a;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             overflow: hidden;
             display: flex;
@@ -32,15 +32,18 @@
 
         #game-container {
             position: relative;
-            box-shadow: 0 0 50px rgba(0, 229, 255, 0.15);
+            box-shadow: 0 0 60px rgba(0, 229, 255, 0.25);
             border-radius: 8px;
             overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(0, 229, 255, 0.3);
+            width: 800px;
+            height: 600px;
         }
 
         canvas {
             display: block;
-            background: #02040a;
+            width: 100%;
+            height: 100%;
         }
 
         /* --- UI Overlay --- */
@@ -54,8 +57,9 @@
             justify-content: space-between;
             align-items: center;
             color: #fff;
-            background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+            background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
             pointer-events: none;
+            z-index: 5;
         }
 
         .stats-group {
@@ -70,12 +74,13 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+            text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
         }
 
         #lives {
             color: var(--danger);
             letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(255, 82, 82, 0.6);
         }
 
         button {
@@ -93,12 +98,12 @@
             color: #000;
             padding: 8px 16px;
             font-size: 14px;
-            box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.5);
         }
 
         .btn-ui:hover {
             transform: translateY(-2px);
-            box-shadow: 0 0 15px rgba(0, 229, 255, 0.7);
+            box-shadow: 0 0 22px rgba(0, 229, 255, 0.9);
         }
 
         /* --- Overlays & Modals --- */
@@ -108,22 +113,23 @@
             left: 50%;
             transform: translate(-50%, -50%);
             background: var(--bg-glass);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 229, 255, 0.3);
             border-radius: 12px;
             padding: 24px 32px;
             color: white;
             text-align: center;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 229, 255, 0.2);
             display: none;
             z-index: 10;
+            min-width: 340px;
         }
 
         #game-over-modal h1 {
             color: var(--danger);
             margin: 0 0 10px 0;
             font-size: 42px;
-            text-shadow: 0 0 15px rgba(255, 82, 82, 0.5);
+            text-shadow: 0 0 20px rgba(255, 82, 82, 0.8);
         }
 
         .btn-primary {
@@ -132,18 +138,21 @@
             padding: 12px 28px;
             font-size: 18px;
             margin-top: 15px;
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.4);
         }
 
         .btn-primary:hover {
             background: var(--primary-hover);
             transform: translateY(-2px);
+            box-shadow: 0 0 20px rgba(76, 175, 80, 0.7);
         }
 
         #upgrade-menu h2 {
             margin-top: 0;
             color: var(--accent);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
             padding-bottom: 10px;
+            text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
         }
 
         .upgrade-grid {
@@ -168,6 +177,7 @@
         .btn-upgrade:hover:not(:disabled) {
             background: rgba(0, 229, 255, 0.15);
             border-color: var(--accent);
+            box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
         }
 
         .btn-upgrade:disabled {
@@ -176,13 +186,41 @@
         }
 
         .cost-tag {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(0, 229, 255, 0.15);
             padding: 4px 8px;
             border-radius: 4px;
             font-size: 12px;
             color: var(--accent);
         }
+
+        #boss-warning {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff0055;
+            font-size: 36px;
+            font-weight: 900;
+            letter-spacing: 4px;
+            text-shadow: 0 0 20px #ff0055, 0 0 40px #ff0055;
+            display: none;
+            z-index: 6;
+            animation: pulse 0.5s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.3; transform: translate(-50%, -50%) scale(0.95); }
+            100% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+        }
     </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 </head>
 <body>
 
@@ -195,7 +233,7 @@
             <button id="upgrade-btn" class="btn-ui">Upgrades (M)</button>
         </div>
 
-        <canvas id="game-canvas" width="800" height="600"></canvas>
+        <div id="boss-warning">WARNING: BOSS APPROACHING</div>
 
         <div id="game-over-modal" class="modal">
             <h1>GAME OVER</h1>
@@ -230,10 +268,10 @@
     </div>
 
     <script>
-        const canvas = document.getElementById('game-canvas');
-        const ctx = canvas.getContext('2d');
-        
-        // UI Elements
+        // --- Game Bounds ---
+        const BOUNDS = { width: 800, height: 600 };
+
+        // --- UI References ---
         const scoreEl = document.getElementById('score');
         const livesEl = document.getElementById('lives');
         const gameOverModal = document.getElementById('game-over-modal');
@@ -242,18 +280,19 @@
         const upgradeBtn = document.getElementById('upgrade-btn');
         const upgradeMenu = document.getElementById('upgrade-menu');
         const closeUpgradeBtn = document.getElementById('close-upgrade');
+        const bossWarningEl = document.getElementById('boss-warning');
 
-        // State Management
+        // --- State Variables ---
         let score = 0;
         let lives = 3;
         let maxLives = 3;
         let gameRunning = true;
         let lastShotTime = 0;
         let bulletCooldown = 200;
-        let enemyBulletCooldown = 2000;
+        let enemyBulletCooldown = 1800;
         let totalUpgrades = 0;
+        let screenShakeTime = 0;
 
-        // Upgrade Levels
         const upgrades = {
             firingSpeed: { level: 0, cost: 50 },
             health: { level: 0, cost: 100 },
@@ -263,46 +302,365 @@
             multiShot: { level: 0, cost: 200 }
         };
 
-        // Player & Shield
         let shieldActive = false;
         let shieldEndTime = 0;
-        let baseBulletSpeed = 7;
+        let baseBulletSpeed = 12;
 
+        const keys = {};
+
+        // --- Three.js & WebGL Bloom Setup ---
+        const container = document.getElementById('game-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x02040a, 0.001);
+
+        const camera = new THREE.OrthographicCamera(
+            -BOUNDS.width / 2, BOUNDS.width / 2,
+            BOUNDS.height / 2, -BOUNDS.height / 2,
+            0.1, 1000
+        );
+        camera.position.z = 500;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(BOUNDS.width, BOUNDS.height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ReinhardToneMapping;
+        container.appendChild(renderer.domElement);
+
+        // Bloom Post-Processing Pipeline
+        const renderScene = new THREE.RenderPass(scene, camera);
+        const bloomPass = new THREE.UnrealBloomPass(
+            new THREE.Vector2(BOUNDS.width, BOUNDS.height),
+            1.8,  // Bloom Strength
+            0.4,  // Radius
+            0.1   // Threshold (Low threshold = high glow)
+        );
+
+        const composer = new THREE.EffectComposer(renderer);
+        composer.addPass(renderScene);
+        composer.addPass(bloomPass);
+
+        // Ambient Light
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+
+        // --- Dynamic Background Starfield ---
+        const starCount = 200;
+        const starGeo = new THREE.BufferGeometry();
+        const starPositions = new Float32Array(starCount * 3);
+        const starSpeeds = [];
+
+        for (let i = 0; i < starCount; i++) {
+            starPositions[i * 3] = (Math.random() - 0.5) * BOUNDS.width;
+            starPositions[i * 3 + 1] = (Math.random() - 0.5) * BOUNDS.height;
+            starPositions[i * 3 + 2] = -50 - Math.random() * 200;
+            starSpeeds.push(1 + Math.random() * 3);
+        }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+        const starMat = new THREE.PointsMaterial({ color: 0x88ccff, size: 2.5, transparent: true, opacity: 0.8 });
+        const starField = new THREE.Points(starGeo, starMat);
+        scene.add(starField);
+
+        // --- Particle System for Explosions & Sparks ---
+        const maxParticles = 300;
+        const particleGeo = new THREE.BufferGeometry();
+        const particlePositions = new Float32Array(maxParticles * 3);
+        const particleVelocities = [];
+        const particleLifes = new Float32Array(maxParticles);
+        const particleColors = new Float32Array(maxParticles * 3);
+
+        for (let i = 0; i < maxParticles; i++) {
+            particleVelocities.push(new THREE.Vector3());
+            particleLifes[i] = 0;
+        }
+
+        particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+        particleGeo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
+
+        const particleMat = new THREE.PointsMaterial({
+            size: 5,
+            vertexColors: true,
+            transparent: true,
+            blending: THREE.AdditiveBlending
+        });
+        const particleSystem = new THREE.Points(particleGeo, particleMat);
+        scene.add(particleSystem);
+
+        function triggerExplosion(x, y, colorHex = 0xffaa00, count = 25) {
+            const positions = particleGeo.attributes.position.array;
+            const colors = particleGeo.attributes.color.array;
+            const c = new THREE.Color(colorHex);
+
+            let spawned = 0;
+            for (let i = 0; i < maxParticles && spawned < count; i++) {
+                if (particleLifes[i] <= 0) {
+                    positions[i * 3] = x;
+                    positions[i * 3 + 1] = y;
+                    positions[i * 3 + 2] = 10;
+
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 2 + Math.random() * 6;
+                    particleVelocities[i].set(Math.cos(angle) * speed, Math.sin(angle) * speed, 0);
+
+                    particleLifes[i] = 1.0;
+
+                    colors[i * 3] = c.r * 2.0; // Boosted brightness for Bloom
+                    colors[i * 3 + 1] = c.g * 2.0;
+                    colors[i * 3 + 2] = c.b * 2.0;
+
+                    spawned++;
+                }
+            }
+            particleGeo.attributes.position.needsUpdate = true;
+            particleGeo.attributes.color.needsUpdate = true;
+        }
+
+        function updateParticles() {
+            const positions = particleGeo.attributes.position.array;
+            for (let i = 0; i < maxParticles; i++) {
+                if (particleLifes[i] > 0) {
+                    particleLifes[i] -= 0.03;
+                    positions[i * 3] += particleVelocities[i].x;
+                    positions[i * 3 + 1] += particleVelocities[i].y;
+
+                    if (particleLifes[i] <= 0) {
+                        positions[i * 3 + 1] = -9999;
+                    }
+                }
+            }
+            particleGeo.attributes.position.needsUpdate = true;
+        }
+
+        // --- Player Ship Setup ---
         const player = {
-            x: canvas.width / 2 - 25,
-            y: canvas.height - 70,
-            width: 50,
-            height: 50,
-            speed: 5
+            x: 0,
+            y: -220,
+            width: 44,
+            height: 44,
+            speed: 6,
+            mesh: null,
+            shieldMesh: null
         };
 
-        // Entities & Systems
+        function createPlayerMesh() {
+            const group = new THREE.Group();
+
+            // Ship Body
+            const bodyGeo = new THREE.ConeGeometry(22, 44, 4);
+            const bodyMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
+            const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+            group.add(bodyMesh);
+
+            // Engine Core Glow
+            const engineGeo = new THREE.SphereGeometry(8, 8, 8);
+            const engineMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+            const engineMesh = new THREE.Mesh(engineGeo, engineMat);
+            engineMesh.position.y = -18;
+            group.add(engineMesh);
+
+            // Shield Mesh
+            const shieldGeo = new THREE.RingGeometry(28, 32, 32);
+            const shieldMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+            const shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
+            shieldMesh.visible = false;
+            group.add(shieldMesh);
+
+            player.mesh = group;
+            player.shieldMesh = shieldMesh;
+            scene.add(group);
+        }
+        createPlayerMesh();
+
+        // --- Entities Lists ---
         let bullets = [];
         let enemies = [];
         let enemyBullets = [];
         let boss = null;
         let gameStartTime = Date.now();
-        const bossSpawnTime = 300000; // 5 mins
+        const bossSpawnTime = 45000; // Spawns boss after 45 seconds (or instant debug testing)
         let bossSpawned = false;
-        const keys = {};
 
-        // Generate Static Background Stars (Performance Optimization)
-        const stars = Array.from({ length: 80 }, () => ({
-            x: Math.random() * canvas.width,
-            y: Math.random() * canvas.height,
-            size: Math.random() * 1.5 + 0.5,
-            alpha: Math.random() * 0.8 + 0.2
-        }));
-
-        // Helper: Collision detection
+        // --- Helper Functions ---
         function isColliding(rect1, rect2) {
-            return rect1.x < rect2.x + rect2.width &&
-                   rect1.x + rect1.width > rect2.x &&
-                   rect1.y < rect2.y + rect2.height &&
-                   rect1.y + rect1.height > rect2.y;
+            return rect1.x - rect1.width / 2 < rect2.x + rect2.width / 2 &&
+                   rect1.x + rect1.width / 2 > rect2.x - rect2.width / 2 &&
+                   rect1.y - rect1.height / 2 < rect2.y + rect2.height / 2 &&
+                   rect1.y + rect1.height / 2 > rect2.y - rect2.height / 2;
         }
 
-        // --- Event Listeners ---
+        // --- Firing Lasers ---
+        function createPlayerLaser(x, y, vx = 0) {
+            const geo = new THREE.PlaneGeometry(6, 20);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffea00 }); // High neon yellow
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y, 0);
+            scene.add(mesh);
+
+            bullets.push({
+                x, y, width: 6, height: 20,
+                vx, vy: baseBulletSpeed,
+                mesh
+            });
+        }
+
+        function createEnemyLaser(x, y, vx, vy, colorHex = 0xff0055, size = 10) {
+            const geo = new THREE.SphereGeometry(size / 2, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y, 0);
+            scene.add(mesh);
+
+            enemyBullets.push({
+                x, y, width: size, height: size,
+                vx, vy, mesh
+            });
+        }
+
+        // --- Overhauled WebGL Boss Fight System ---
+        function spawnBoss() {
+            enemies.forEach(e => scene.remove(e.mesh));
+            enemies = [];
+
+            const group = new THREE.Group();
+
+            // Boss Outer Frame
+            const frameGeo = new THREE.OctahedronGeometry(60, 0);
+            const frameMat = new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true });
+            const frameMesh = new THREE.Mesh(frameGeo, frameMat);
+            group.add(frameMesh);
+
+            // Boss Inner Core
+            const coreGeo = new THREE.SphereGeometry(30, 16, 16);
+            const coreMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
+            const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+            group.add(coreMesh);
+
+            // Shield Rings
+            const ringGeo = new THREE.TorusGeometry(85, 3, 16, 100);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
+            const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+            group.add(ringMesh);
+
+            // Telegraphed Beam Indicator
+            const beamGeo = new THREE.PlaneGeometry(30, BOUNDS.height);
+            const beamMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0 });
+            const beamMesh = new THREE.Mesh(beamGeo, beamMat);
+            beamMesh.position.y = -BOUNDS.height / 2;
+            group.add(beamMesh);
+
+            scene.add(group);
+
+            boss = {
+                x: 0,
+                y: 180,
+                width: 120,
+                height: 120,
+                health: 2500,
+                maxHealth: 2500,
+                phase: 1,
+                group,
+                frameMesh,
+                coreMesh,
+                ringMesh,
+                beamMesh,
+                lastAttack: Date.now(),
+                attackTimer: 0,
+                beamCharging: false,
+                beamFiring: false,
+                vx: 2.5
+            };
+
+            bossWarningEl.style.display = 'block';
+            setTimeout(() => { bossWarningEl.style.display = 'none'; }, 3000);
+        }
+
+        function updateBoss() {
+            if (!boss) return;
+            const now = Date.now();
+
+            // Boss Hover Movement
+            boss.x += boss.vx;
+            if (Math.abs(boss.x) > 280) boss.vx *= -1;
+
+            boss.group.position.set(boss.x, boss.y, 0);
+            boss.ringMesh.rotation.z += 0.03;
+            boss.frameMesh.rotation.y += 0.02;
+
+            // Health Phase Transitions
+            const healthRatio = boss.health / boss.maxHealth;
+            if (healthRatio < 0.65 && boss.phase === 1) {
+                boss.phase = 2;
+                boss.coreMesh.material.color.setHex(0xffaa00);
+                triggerExplosion(boss.x, boss.y, 0xffaa00, 60);
+            } else if (healthRatio < 0.3 && boss.phase === 2) {
+                boss.phase = 3;
+                boss.coreMesh.material.color.setHex(0xff0000);
+                boss.vx *= 1.6;
+                triggerExplosion(boss.x, boss.y, 0xff0000, 80);
+            }
+
+            // --- Phase Attack Logic ---
+            if (now - boss.lastAttack > (boss.phase === 3 ? 600 : 1100)) {
+                boss.attackTimer++;
+
+                if (boss.phase === 1) {
+                    // Dual Spiral Pattern
+                    const count = 8;
+                    for (let i = 0; i < count; i++) {
+                        const angle = (boss.attackTimer * 0.2) + (i * Math.PI * 2 / count);
+                        createEnemyLaser(boss.x, boss.y, Math.cos(angle) * 4, Math.sin(angle) * 4, 0x00e5ff, 12);
+                    }
+                } else if (boss.phase === 2) {
+                    // Seeker Missile Barrage & Beam Attack Trigger
+                    if (boss.attackTimer % 3 === 0) {
+                        // Beam Attack Telegraphing
+                        boss.beamCharging = true;
+                        let chargeProgress = 0;
+                        const chargeInterval = setInterval(() => {
+                            chargeProgress += 0.1;
+                            boss.beamMesh.material.opacity = chargeProgress * 0.4;
+                            if (chargeProgress >= 1) {
+                                clearInterval(chargeInterval);
+                                // Fire Main Laser Beam
+                                boss.beamFiring = true;
+                                boss.beamMesh.material.opacity = 0.9;
+                                boss.beamMesh.material.color.setHex(0xff0055);
+                                screenShakeTime = 20;
+
+                                setTimeout(() => {
+                                    boss.beamFiring = false;
+                                    boss.beamCharging = false;
+                                    boss.beamMesh.material.opacity = 0;
+                                    boss.beamMesh.material.color.setHex(0xff0000);
+                                }, 1200);
+                            }
+                        }, 100);
+                    } else {
+                        // Homing Plasma Orbs
+                        for (let i = -2; i <= 2; i += 2) {
+                            createEnemyLaser(boss.x + i * 20, boss.y, i * 1.5, -5, 0xffaa00, 14);
+                        }
+                    }
+                } else if (boss.phase === 3) {
+                    // Phase 3: Enraged Death Blossom
+                    const count = 14;
+                    for (let i = 0; i < count; i++) {
+                        const angle = (i * Math.PI * 2 / count) + Math.random() * 0.2;
+                        createEnemyLaser(boss.x, boss.y, Math.cos(angle) * 5.5, Math.sin(angle) * 5.5, 0xff0055, 10);
+                    }
+                }
+
+                boss.lastAttack = now;
+            }
+
+            // Check Boss Laser Beam Hit Player
+            if (boss.beamFiring) {
+                if (Math.abs(player.x - boss.x) < 25 && !shieldActive) {
+                    registerPlayerHit();
+                }
+            }
+        }
+
+        // --- Controls & Upgrades ---
         window.addEventListener('keydown', e => {
             keys[e.code] = true;
             if (e.code === 'KeyM' && gameRunning) toggleUpgradeMenu(true);
@@ -313,7 +671,6 @@
         upgradeBtn.addEventListener('click', () => toggleUpgradeMenu(true));
         closeUpgradeBtn.addEventListener('click', () => toggleUpgradeMenu(false));
 
-        // Upgrade Click Handler
         document.querySelectorAll('.btn-upgrade').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const type = e.currentTarget.dataset.upgrade;
@@ -331,11 +688,8 @@
         function toggleUpgradeMenu(show) {
             upgradeMenu.style.display = show ? 'block' : 'none';
             gameRunning = !show;
-            if (show) {
-                updateUpgradeButtons();
-            } else {
-                gameLoop();
-            }
+            if (show) updateUpgradeButtons();
+            else gameLoop();
         }
 
         function buyUpgrade(type) {
@@ -349,7 +703,7 @@
 
             switch (type) {
                 case 'firingSpeed':
-                    bulletCooldown = Math.max(50, bulletCooldown - 20);
+                    bulletCooldown = Math.max(60, bulletCooldown - 25);
                     break;
                 case 'health':
                     maxLives++;
@@ -357,10 +711,10 @@
                     livesEl.innerHTML = '♥'.repeat(lives);
                     break;
                 case 'movementSpeed':
-                    player.speed += 1;
+                    player.speed += 1.2;
                     break;
                 case 'bulletSpeed':
-                    baseBulletSpeed += 1.5;
+                    baseBulletSpeed += 2.5;
                     break;
                 case 'shield':
                     shieldActive = true;
@@ -370,18 +724,47 @@
             toggleUpgradeMenu(false);
         }
 
+        function registerPlayerHit() {
+            if (shieldActive) return;
+
+            lives--;
+            livesEl.innerHTML = '♥'.repeat(Math.max(0, lives));
+            triggerExplosion(player.x, player.y, 0x00e5ff, 40);
+            screenShakeTime = 15;
+
+            if (lives <= 0) {
+                gameRunning = false;
+                finalScoreEl.textContent = score;
+                gameOverModal.style.display = 'block';
+            } else {
+                // Temporary Invincibility
+                shieldActive = true;
+                shieldEndTime = Date.now() + 1500;
+            }
+        }
+
         function restartGame() {
             score = 0;
             lives = maxLives;
             livesEl.innerHTML = '♥'.repeat(lives);
             scoreEl.textContent = score;
+
+            bullets.forEach(b => scene.remove(b.mesh));
+            enemies.forEach(e => scene.remove(e.mesh));
+            enemyBullets.forEach(b => scene.remove(b.mesh));
+
             bullets = [];
             enemies = [];
             enemyBullets = [];
-            player.x = canvas.width / 2 - 25;
-            player.y = canvas.height - 70;
+
+            if (boss) {
+                scene.remove(boss.group);
+                boss = null;
+            }
+
+            player.x = 0;
+            player.y = -220;
             shieldActive = false;
-            boss = null;
             bossSpawned = false;
             gameStartTime = Date.now();
             gameRunning = true;
@@ -389,305 +772,201 @@
             gameLoop();
         }
 
-        // --- Boss Logic ---
-        function spawnBoss() {
-            enemies = [];
-            enemyBullets = [];
-            boss = {
-                x: canvas.width / 2 - 100,
-                y: 50,
-                width: 200,
-                height: 80,
-                health: 2000,
-                maxHealth: 2000,
-                color: '#e11d48',
-                originalColor: '#e11d48',
-                attackPattern: 'spread',
-                lastAttackTime: Date.now(),
-                attackCooldown: 1000,
-                attackPhaseTimer: 0
-            };
-        }
-
-        function updateBoss() {
-            if (!boss) return;
-            const currentTime = Date.now();
-
-            if (currentTime - boss.lastAttackTime > boss.attackCooldown) {
-                const fireSpread = (count, speed) => {
-                    const startAngle = -Math.PI / 4;
-                    const angleStep = (Math.PI / 2) / (count - 1);
-                    for (let i = 0; i < count; i++) {
-                        const angle = startAngle + (angleStep * i);
-                        enemyBullets.push({
-                            x: boss.x + boss.width / 2,
-                            y: boss.y + boss.height,
-                            width: 8, height: 8,
-                            velX: Math.sin(angle) * speed,
-                            velY: Math.cos(angle) * speed,
-                            color: '#fbbf24'
-                        });
-                    }
-                };
-
-                if (boss.attackPattern === 'spread') {
-                    fireSpread(5, 5);
-                    if (++boss.attackPhaseTimer > 3) {
-                        boss.attackPattern = 'pause';
-                        boss.attackPhaseTimer = 0;
-                        boss.attackCooldown = 2500;
-                    }
-                } else if (boss.attackPattern === 'pause') {
-                    boss.attackPattern = 'spread2';
-                    boss.attackCooldown = 1500;
-                } else if (boss.attackPattern === 'spread2') {
-                    fireSpread(9, 4.5);
-                    if (++boss.attackPhaseTimer > 5) {
-                        boss.attackPattern = 'pause2';
-                        boss.attackPhaseTimer = 0;
-                        boss.attackCooldown = 3000;
-                    }
-                } else if (boss.attackPattern === 'pause2') {
-                    boss.attackPattern = 'spread';
-                    boss.attackCooldown = 1500;
-                }
-                boss.lastAttackTime = currentTime;
-            }
-        }
-
-        // --- Core Updates ---
+        // --- Core Update Loop ---
         function update() {
-            const currentTime = Date.now();
+            const now = Date.now();
 
-            // Boss Check
-            if (!boss && !bossSpawned && (currentTime - gameStartTime > bossSpawnTime)) {
+            // Boss Spawning Trigger
+            if (!boss && !bossSpawned && (now - gameStartTime > bossSpawnTime)) {
                 spawnBoss();
                 bossSpawned = true;
             }
 
             // Shield status
-            if (shieldActive && currentTime > shieldEndTime) {
-                shieldActive = false;
+            if (shieldActive) {
+                player.shieldMesh.visible = true;
+                player.shieldMesh.rotation.z += 0.05;
+                if (now > shieldEndTime) {
+                    shieldActive = false;
+                    player.shieldMesh.visible = false;
+                }
             }
 
-            // Controls
+            // Player Movement Controls
             if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
             if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
-            if (keys['ArrowUp'] || keys['KeyW']) player.y -= player.speed;
-            if (keys['ArrowDown'] || keys['KeyS']) player.y += player.speed;
+            if (keys['ArrowUp'] || keys['KeyW']) player.y += player.speed;
+            if (keys['ArrowDown'] || keys['KeyS']) player.y -= player.speed;
 
-            // Clamp Player
-            player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
-            player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
+            // Screen Clamping
+            player.x = Math.max(-BOUNDS.width / 2 + 25, Math.min(BOUNDS.width / 2 - 25, player.x));
+            player.y = Math.max(-BOUNDS.height / 2 + 25, Math.min(BOUNDS.height / 2 - 25, player.y));
 
-            // Firing
-            if (keys['Space'] && currentTime - lastShotTime > bulletCooldown) {
-                const createBullet = (offsetX) => ({
-                    x: player.x + player.width / 2 + offsetX - 2,
-                    y: player.y,
-                    width: 4, height: 12,
-                    speed: baseBulletSpeed
-                });
+            player.mesh.position.set(player.x, player.y, 0);
 
+            // Laser Shooting
+            if (keys['Space'] && now - lastShotTime > bulletCooldown) {
                 if (upgrades.multiShot.level > 0) {
-                    bullets.push(createBullet(-12), createBullet(0), createBullet(12));
+                    createPlayerLaser(player.x - 12, player.y + 15, -1.5);
+                    createPlayerLaser(player.x, player.y + 20, 0);
+                    createPlayerLaser(player.x + 12, player.y + 15, 1.5);
                 } else {
-                    bullets.push(createBullet(0));
+                    createPlayerLaser(player.x, player.y + 20, 0);
                 }
-                lastShotTime = currentTime;
+                lastShotTime = now;
             }
 
-            // Entity Motion & Cleanups
-            bullets = bullets.filter(b => (b.y -= b.speed) > 0);
+            // Update Player Lasers
+            bullets = bullets.filter(b => {
+                b.x += b.vx;
+                b.y += b.vy;
+                b.mesh.position.set(b.x, b.y, 0);
 
-            if (!boss && Math.random() < 0.025) {
+                if (b.y > BOUNDS.height / 2) {
+                    scene.remove(b.mesh);
+                    return false;
+                }
+                return true;
+            });
+
+            // Spawn Regular Enemy Waves
+            if (!boss && Math.random() < 0.03) {
+                const geo = new THREE.DodecahedronGeometry(16);
+                const mat = new THREE.MeshBasicMaterial({ color: Math.random() < 0.2 ? 0xa855f7 : 0x22c55e });
+                const mesh = new THREE.Mesh(geo, mat);
+                const x = (Math.random() - 0.5) * (BOUNDS.width - 60);
+                const y = BOUNDS.height / 2 + 20;
+
+                mesh.position.set(x, y, 0);
+                scene.add(mesh);
+
                 enemies.push({
-                    x: Math.random() * (canvas.width - 40),
-                    y: -40, width: 36, height: 36,
+                    x, y, width: 32, height: 32,
                     speed: 2 + Math.random() * 2,
-                    type: Math.random() < 0.15 ? 'special' : 'normal',
-                    lastShotTime: 0
+                    type: Math.random() < 0.2 ? 'special' : 'normal',
+                    mesh,
+                    lastShot: 0
                 });
             }
 
+            // Update Regular Enemies
             enemies = enemies.filter(enemy => {
-                enemy.y += enemy.speed;
-                if (totalUpgrades >= 1 && currentTime - enemy.lastShotTime > enemyBulletCooldown) {
-                    enemyBullets.push({
-                        x: enemy.x + enemy.width / 2 - 2, y: enemy.y + enemy.height,
-                        width: 4, height: 10, velX: 0, velY: 4, color: '#ff4444'
-                    });
-                    enemy.lastShotTime = currentTime;
+                enemy.y -= enemy.speed;
+                enemy.mesh.position.set(enemy.x, enemy.y, 0);
+                enemy.mesh.rotation.x += 0.02;
+                enemy.mesh.rotation.y += 0.02;
+
+                if (totalUpgrades >= 1 && now - enemy.lastShot > enemyBulletCooldown) {
+                    createEnemyLaser(enemy.x, enemy.y - 15, 0, -4, 0xff0055, 8);
+                    enemy.lastShot = now;
                 }
-                return enemy.y < canvas.height;
+
+                if (enemy.y < -BOUNDS.height / 2 - 20) {
+                    scene.remove(enemy.mesh);
+                    return false;
+                }
+                return true;
+            });
+
+            // Update Enemy Lasers
+            enemyBullets = enemyBullets.filter(b => {
+                b.x += b.vx;
+                b.y += b.vy;
+                b.mesh.position.set(b.x, b.y, 0);
+
+                // Collision with player
+                if (isColliding(b, player)) {
+                    scene.remove(b.mesh);
+                    registerPlayerHit();
+                    return false;
+                }
+
+                if (Math.abs(b.x) > BOUNDS.width / 2 || Math.abs(b.y) > BOUNDS.height / 2) {
+                    scene.remove(b.mesh);
+                    return false;
+                }
+                return true;
             });
 
             if (boss) updateBoss();
 
-            enemyBullets = enemyBullets.filter(b => {
-                b.x += b.velX || 0;
-                b.y += b.velY || b.speed;
-                return b.y < canvas.height && b.y > -b.height && b.x > -b.width && b.x < canvas.width;
-            });
-
-            // Collisions
+            // Laser Collision Logic
             for (let bIdx = bullets.length - 1; bIdx >= 0; bIdx--) {
                 const b = bullets[bIdx];
 
+                // Hit Regular Enemies
                 for (let eIdx = enemies.length - 1; eIdx >= 0; eIdx--) {
                     const e = enemies[eIdx];
                     if (isColliding(b, e)) {
-                        bullets.splice(bIdx, 1);
-                        enemies.splice(eIdx, 1);
+                        triggerExplosion(e.x, e.y, e.type === 'special' ? 0xa855f7 : 0x22c55e, 20);
                         score += e.type === 'special' ? 100 : 25;
                         scoreEl.textContent = score;
+
+                        scene.remove(b.mesh);
+                        scene.remove(e.mesh);
+                        bullets.splice(bIdx, 1);
+                        enemies.splice(eIdx, 1);
                         break;
                     }
                 }
 
+                // Hit Boss
                 if (boss && isColliding(b, boss)) {
+                    boss.health -= 15;
+                    triggerExplosion(b.x, b.y, 0xffea00, 5);
+                    scene.remove(b.mesh);
                     bullets.splice(bIdx, 1);
-                    boss.health -= 10;
-                    boss.color = '#ffffff';
-                    setTimeout(() => { if (boss) boss.color = boss.originalColor; }, 40);
 
                     if (boss.health <= 0) {
+                        triggerExplosion(boss.x, boss.y, 0xff0055, 120);
                         score += 5000;
                         scoreEl.textContent = score;
+                        scene.remove(boss.group);
                         boss = null;
                     }
                 }
             }
 
-            // Player Damage Logic
+            // Player Collision with Enemies
             if (!shieldActive) {
-                const registerHit = () => {
-                    lives--;
-                    livesEl.innerHTML = '♥'.repeat(Math.max(0, lives));
-                    if (lives <= 0) {
-                        gameRunning = false;
-                        finalScoreEl.textContent = score;
-                        gameOverModal.style.display = 'block';
-                    }
-                };
+                enemies.forEach(e => {
+                    if (isColliding(player, e)) registerPlayerHit();
+                });
+                if (boss && isColliding(player, boss)) registerPlayerHit();
+            }
 
-                // Check Enemies
-                for (let i = enemies.length - 1; i >= 0; i--) {
-                    if (isColliding(player, enemies[i])) {
-                        enemies.splice(i, 1);
-                        registerHit();
-                    }
+            // Starfield Motion
+            const positions = starGeo.attributes.position.array;
+            for (let i = 0; i < starCount; i++) {
+                positions[i * 3 + 1] -= starSpeeds[i];
+                if (positions[i * 3 + 1] < -BOUNDS.height / 2) {
+                    positions[i * 3 + 1] = BOUNDS.height / 2;
                 }
+            }
+            starGeo.attributes.position.needsUpdate = true;
 
-                // Check Enemy Bullets
-                for (let i = enemyBullets.length - 1; i >= 0; i--) {
-                    if (isColliding(player, enemyBullets[i])) {
-                        enemyBullets.splice(i, 1);
-                        registerHit();
-                    }
-                }
+            updateParticles();
 
-                // Check Boss
-                if (boss && isColliding(player, boss)) {
-                    registerHit();
-                    if (gameRunning) {
-                        player.y = boss.y + boss.height + 25;
-                        shieldActive = true;
-                        shieldEndTime = Date.now() + 1000;
-                    }
-                }
+            // Camera Screen Shake
+            if (screenShakeTime > 0) {
+                camera.position.x = (Math.random() - 0.5) * screenShakeTime * 0.8;
+                camera.position.y = (Math.random() - 0.5) * screenShakeTime * 0.8;
+                screenShakeTime--;
+            } else {
+                camera.position.x = 0;
+                camera.position.y = 0;
             }
         }
 
-        // --- Render Engine ---
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Draw Dynamic Starfield
-            ctx.fillStyle = '#ffffff';
-            stars.forEach(s => {
-                ctx.globalAlpha = s.alpha;
-                ctx.fillRect(s.x, s.y, s.size, s.size);
-            });
-            ctx.globalAlpha = 1.0;
-
-            // Shield Visual Effect
-            if (shieldActive) {
-                ctx.strokeStyle = '#00e5ff';
-                ctx.lineWidth = 3;
-                ctx.shadowBlur = 12;
-                ctx.shadowColor = '#00e5ff';
-                ctx.beginPath();
-                ctx.arc(player.x + player.width / 2, player.y + player.height / 2, player.width / 2 + 12, 0, Math.PI * 2);
-                ctx.stroke();
-                ctx.shadowBlur = 0;
-            }
-
-            // Player Spacecraft
-            ctx.fillStyle = '#38bdf8';
-            ctx.beginPath();
-            ctx.moveTo(player.x + player.width / 2, player.y);
-            ctx.lineTo(player.x, player.y + player.height);
-            ctx.lineTo(player.x + player.width / 2, player.y + player.height * 0.75);
-            ctx.lineTo(player.x + player.width, player.y + player.height);
-            ctx.closePath();
-            ctx.fill();
-
-            // Player Bullets
-            ctx.fillStyle = '#facc15';
-            bullets.forEach(b => ctx.fillRect(b.x, b.y, b.width, b.height));
-
-            // Enemy Bullets
-            enemyBullets.forEach(b => {
-                ctx.fillStyle = b.color;
-                ctx.fillRect(b.x, b.y, b.width, b.height);
-            });
-
-            // Enemies
-            enemies.forEach(e => {
-                const cx = e.x + e.width / 2;
-                const cy = e.y + e.height / 2;
-
-                if (e.type === 'special') {
-                    ctx.fillStyle = '#a855f7';
-                    ctx.fillRect(e.x, e.y, e.width, e.height);
-                } else {
-                    ctx.fillStyle = '#22c55e';
-                    ctx.beginPath();
-                    ctx.arc(cx, cy, e.width / 2, 0, Math.PI * 2);
-                    ctx.fill();
-
-                    // Eyes
-                    ctx.fillStyle = '#000';
-                    ctx.beginPath();
-                    ctx.arc(cx - 6, cy - 3, 3, 0, Math.PI * 2);
-                    ctx.arc(cx + 6, cy - 3, 3, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            });
-
-            // Boss Render
-            if (boss) {
-                ctx.fillStyle = boss.color;
-                ctx.fillRect(boss.x, boss.y, boss.width, boss.height);
-
-                // Boss Health Bar UI
-                const hbY = boss.y - 18;
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-                ctx.fillRect(boss.x, hbY, boss.width, 8);
-                ctx.fillStyle = '#ef4444';
-                ctx.fillRect(boss.x, hbY, boss.width * (boss.health / boss.maxHealth), 8);
-            }
-        }
-
+        // --- Render Loop ---
         function gameLoop() {
             if (!gameRunning) return;
             update();
-            draw();
+            composer.render();
             requestAnimationFrame(gameLoop);
         }
 
-        // Initialize Game
+        // Start Game Engine
         gameLoop();
     </script>
 </body>
