@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Space Adventure - WebGL Bloom Edition</title>
+    <title>Space Adventure - Multi-Boss Bloom Edition</title>
     <style>
         :root {
             --primary: #4CAF50;
@@ -199,12 +199,13 @@
             left: 50%;
             transform: translate(-50%, -50%);
             color: #ff0055;
-            font-size: 36px;
+            font-size: 32px;
             font-weight: 900;
-            letter-spacing: 4px;
+            letter-spacing: 3px;
             text-shadow: 0 0 20px #ff0055, 0 0 40px #ff0055;
             display: none;
             z-index: 6;
+            text-align: center;
             animation: pulse 0.5s infinite alternate;
         }
 
@@ -308,6 +309,11 @@
 
         const keys = {};
 
+        // --- Boss Sequence State ---
+        let currentBossType = 0; // 0: Void Sentinel, 1: Cyber Dreadnought, 2: Cosmic Weaver
+        let nextBossSpawnTime = Date.now() + 25000; // First boss spawns after 25s
+        let bossSpawned = false;
+
         // --- Three.js & WebGL Bloom Setup ---
         const container = document.getElementById('game-container');
         const scene = new THREE.Scene();
@@ -332,7 +338,7 @@
             new THREE.Vector2(BOUNDS.width, BOUNDS.height),
             1.8,  // Bloom Strength
             0.4,  // Radius
-            0.1   // Threshold (Low threshold = high glow)
+            0.1   // Threshold
         );
 
         const composer = new THREE.EffectComposer(renderer);
@@ -361,7 +367,7 @@
         scene.add(starField);
 
         // --- Particle System for Explosions & Sparks ---
-        const maxParticles = 300;
+        const maxParticles = 400;
         const particleGeo = new THREE.BufferGeometry();
         const particlePositions = new Float32Array(maxParticles * 3);
         const particleVelocities = [];
@@ -398,7 +404,7 @@
                     positions[i * 3 + 2] = 10;
 
                     const angle = Math.random() * Math.PI * 2;
-                    const speed = 2 + Math.random() * 6;
+                    const speed = 1.5 + Math.random() * 6;
                     particleVelocities[i].set(Math.cos(angle) * speed, Math.sin(angle) * speed, 0);
 
                     particleLifes[i] = 1.0;
@@ -438,13 +444,15 @@
             height: 44,
             speed: 6,
             mesh: null,
-            shieldMesh: null
+            shieldMesh: null,
+            thrusterMesh: null,
+            innerFlameMesh: null
         };
 
         function createPlayerMesh() {
             const group = new THREE.Group();
 
-            // Ship Body
+            // Ship Main Body
             const bodyGeo = new THREE.ConeGeometry(22, 44, 4);
             const bodyMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
             const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
@@ -457,6 +465,31 @@
             engineMesh.position.y = -18;
             group.add(engineMesh);
 
+            // --- ANIMATED THRUSTERS / BOOSTER ---
+            const thrusterGeo = new THREE.ConeGeometry(6, 24, 8);
+            thrusterGeo.rotateX(Math.PI); // Point downwards
+            const thrusterMat = new THREE.MeshBasicMaterial({
+                color: 0x00e5ff,
+                transparent: true,
+                opacity: 0.9,
+                blending: THREE.AdditiveBlending
+            });
+            const thrusterMesh = new THREE.Mesh(thrusterGeo, thrusterMat);
+            thrusterMesh.position.y = -28;
+            group.add(thrusterMesh);
+
+            // Inner Intense Thruster Flame Core
+            const innerFlameGeo = new THREE.ConeGeometry(3, 16, 8);
+            innerFlameGeo.rotateX(Math.PI);
+            const innerFlameMat = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.95
+            });
+            const innerFlameMesh = new THREE.Mesh(innerFlameGeo, innerFlameMat);
+            innerFlameMesh.position.y = -24;
+            group.add(innerFlameMesh);
+
             // Shield Mesh
             const shieldGeo = new THREE.RingGeometry(28, 32, 32);
             const shieldMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
@@ -466,6 +499,8 @@
 
             player.mesh = group;
             player.shieldMesh = shieldMesh;
+            player.thrusterMesh = thrusterMesh;
+            player.innerFlameMesh = innerFlameMesh;
             scene.add(group);
         }
         createPlayerMesh();
@@ -475,9 +510,6 @@
         let enemies = [];
         let enemyBullets = [];
         let boss = null;
-        let gameStartTime = Date.now();
-        const bossSpawnTime = 45000; // Spawns boss after 45 seconds (or instant debug testing)
-        let bossSpawned = false;
 
         // --- Helper Functions ---
         function isColliding(rect1, rect2) {
@@ -490,7 +522,7 @@
         // --- Firing Lasers ---
         function createPlayerLaser(x, y, vx = 0) {
             const geo = new THREE.PlaneGeometry(6, 20);
-            const mat = new THREE.MeshBasicMaterial({ color: 0xffea00 }); // High neon yellow
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffea00 });
             const mesh = new THREE.Mesh(geo, mat);
             mesh.position.set(x, y, 0);
             scene.add(mesh);
@@ -515,147 +547,299 @@
             });
         }
 
-        // --- Overhauled WebGL Boss Fight System ---
-        function spawnBoss() {
+        // ============================================================================
+        // MULTI-BOSS CREATION ENGINE
+        // ============================================================================
+        function spawnBoss(typeIndex) {
             enemies.forEach(e => scene.remove(e.mesh));
             enemies = [];
 
             const group = new THREE.Group();
+            let name = "";
+            let maxHealth = 2000;
+            let width = 120;
+            let height = 120;
 
-            // Boss Outer Frame
-            const frameGeo = new THREE.OctahedronGeometry(60, 0);
-            const frameMat = new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true });
-            const frameMesh = new THREE.Mesh(frameGeo, frameMat);
-            group.add(frameMesh);
+            if (typeIndex === 0) {
+                // --- BOSS 1: VOID SENTINEL (Octahedron & Energy Rings) ---
+                name = "VOID SENTINEL";
+                maxHealth = 2000;
 
-            // Boss Inner Core
-            const coreGeo = new THREE.SphereGeometry(30, 16, 16);
-            const coreMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
-            const coreMesh = new THREE.Mesh(coreGeo, coreMat);
-            group.add(coreMesh);
+                const frameGeo = new THREE.OctahedronGeometry(60, 0);
+                const frameMat = new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true });
+                const frameMesh = new THREE.Mesh(frameGeo, frameMat);
+                group.add(frameMesh);
 
-            // Shield Rings
-            const ringGeo = new THREE.TorusGeometry(85, 3, 16, 100);
-            const ringMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
-            const ringMesh = new THREE.Mesh(ringGeo, ringMat);
-            group.add(ringMesh);
+                const coreGeo = new THREE.SphereGeometry(30, 16, 16);
+                const coreMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
+                const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+                group.add(coreMesh);
 
-            // Telegraphed Beam Indicator
-            const beamGeo = new THREE.PlaneGeometry(30, BOUNDS.height);
-            const beamMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0 });
-            const beamMesh = new THREE.Mesh(beamGeo, beamMat);
-            beamMesh.position.y = -BOUNDS.height / 2;
-            group.add(beamMesh);
+                const ringGeo = new THREE.TorusGeometry(85, 3, 16, 100);
+                const ringMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
+                const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+                group.add(ringMesh);
+
+                const beamGeo = new THREE.PlaneGeometry(30, BOUNDS.height);
+                const beamMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0 });
+                const beamMesh = new THREE.Mesh(beamGeo, beamMat);
+                beamMesh.position.y = -BOUNDS.height / 2;
+                group.add(beamMesh);
+
+                boss = {
+                    type: 0, name, x: 0, y: 180, width, height, health: maxHealth, maxHealth,
+                    phase: 1, group, frameMesh, coreMesh, ringMesh, beamMesh,
+                    lastAttack: Date.now(), attackTimer: 0, beamCharging: false, beamFiring: false, vx: 2.5
+                };
+
+            } else if (typeIndex === 1) {
+                // --- BOSS 2: CYBER DREADNOUGHT (Heavy Armored Gunship) ---
+                name = "CYBER DREADNOUGHT";
+                maxHealth = 3200;
+                width = 160; height = 100;
+
+                // Main Armor Hull
+                const hullGeo = new THREE.BoxGeometry(140, 50, 30);
+                const hullMat = new THREE.MeshBasicMaterial({ color: 0x7c3aed });
+                const hullMesh = new THREE.Mesh(hullGeo, hullMat);
+                group.add(hullMesh);
+
+                // Twin Wing Heavy Cannons
+                const cannonGeo = new THREE.CylinderGeometry(8, 12, 60);
+                const cannonMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
+                const leftCannon = new THREE.Mesh(cannonGeo, cannonMat);
+                leftCannon.position.set(-65, -10, 0);
+                const rightCannon = new THREE.Mesh(cannonGeo, cannonMat);
+                rightCannon.position.set(65, -10, 0);
+                group.add(leftCannon);
+                group.add(rightCannon);
+
+                // Glowing Reactor Core
+                const coreGeo = new THREE.BoxGeometry(30, 30, 35);
+                const coreMat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+                const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+                group.add(coreMesh);
+
+                boss = {
+                    type: 1, name, x: 0, y: 180, width, height, health: maxHealth, maxHealth,
+                    phase: 1, group, hullMesh, leftCannon, rightCannon, coreMesh,
+                    lastAttack: Date.now(), attackTimer: 0, vx: 3.5, dashTargetX: 0
+                };
+
+            } else if (typeIndex === 2) {
+                // --- BOSS 3: COSMIC WEAVER (Icosahedron Core + Satellites) ---
+                name = "COSMIC WEAVER";
+                maxHealth = 4500;
+                width = 140; height = 140;
+
+                // Central Nexus
+                const coreGeo = new THREE.IcosahedronGeometry(45, 0);
+                const coreMat = new THREE.MeshBasicMaterial({ color: 0xff00aa, wireframe: true });
+                const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+                group.add(coreMesh);
+
+                const innerGeo = new THREE.SphereGeometry(25, 16, 16);
+                const innerMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+                const innerMesh = new THREE.Mesh(innerGeo, innerMat);
+                group.add(innerMesh);
+
+                // 3 Orbiting Satellites (Drones)
+                const drones = [];
+                for (let i = 0; i < 3; i++) {
+                    const droneGeo = new THREE.DodecahedronGeometry(12);
+                    const droneMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
+                    const droneMesh = new THREE.Mesh(droneGeo, droneMat);
+                    group.add(droneMesh);
+                    drones.push(droneMesh);
+                }
+
+                boss = {
+                    type: 2, name, x: 0, y: 170, width, height, health: maxHealth, maxHealth,
+                    phase: 1, group, coreMesh, innerMesh, drones,
+                    lastAttack: Date.now(), attackTimer: 0, vx: 2.0, droneAngle: 0
+                };
+            }
 
             scene.add(group);
 
-            boss = {
-                x: 0,
-                y: 180,
-                width: 120,
-                height: 120,
-                health: 2500,
-                maxHealth: 2500,
-                phase: 1,
-                group,
-                frameMesh,
-                coreMesh,
-                ringMesh,
-                beamMesh,
-                lastAttack: Date.now(),
-                attackTimer: 0,
-                beamCharging: false,
-                beamFiring: false,
-                vx: 2.5
-            };
-
+            bossWarningEl.textContent = `WARNING: ${name} APPROACHING`;
             bossWarningEl.style.display = 'block';
             setTimeout(() => { bossWarningEl.style.display = 'none'; }, 3000);
+            bossSpawned = true;
         }
 
+        // ============================================================================
+        // BOSS UPDATE & BEHAVIOR CONTROLLER
+        // ============================================================================
         function updateBoss() {
             if (!boss) return;
             const now = Date.now();
 
-            // Boss Hover Movement
-            boss.x += boss.vx;
-            if (Math.abs(boss.x) > 280) boss.vx *= -1;
+            // --- BOSS 1: VOID SENTINEL BEHAVIOR ---
+            if (boss.type === 0) {
+                boss.x += boss.vx;
+                if (Math.abs(boss.x) > 280) boss.vx *= -1;
 
-            boss.group.position.set(boss.x, boss.y, 0);
-            boss.ringMesh.rotation.z += 0.03;
-            boss.frameMesh.rotation.y += 0.02;
+                boss.group.position.set(boss.x, boss.y, 0);
+                boss.ringMesh.rotation.z += 0.03;
+                boss.frameMesh.rotation.y += 0.02;
 
-            // Health Phase Transitions
-            const healthRatio = boss.health / boss.maxHealth;
-            if (healthRatio < 0.65 && boss.phase === 1) {
-                boss.phase = 2;
-                boss.coreMesh.material.color.setHex(0xffaa00);
-                triggerExplosion(boss.x, boss.y, 0xffaa00, 60);
-            } else if (healthRatio < 0.3 && boss.phase === 2) {
-                boss.phase = 3;
-                boss.coreMesh.material.color.setHex(0xff0000);
-                boss.vx *= 1.6;
-                triggerExplosion(boss.x, boss.y, 0xff0000, 80);
-            }
-
-            // --- Phase Attack Logic ---
-            if (now - boss.lastAttack > (boss.phase === 3 ? 600 : 1100)) {
-                boss.attackTimer++;
-
-                if (boss.phase === 1) {
-                    // Dual Spiral Pattern
-                    const count = 8;
-                    for (let i = 0; i < count; i++) {
-                        const angle = (boss.attackTimer * 0.2) + (i * Math.PI * 2 / count);
-                        createEnemyLaser(boss.x, boss.y, Math.cos(angle) * 4, Math.sin(angle) * 4, 0x00e5ff, 12);
-                    }
-                } else if (boss.phase === 2) {
-                    // Seeker Missile Barrage & Beam Attack Trigger
-                    if (boss.attackTimer % 3 === 0) {
-                        // Beam Attack Telegraphing
-                        boss.beamCharging = true;
-                        let chargeProgress = 0;
-                        const chargeInterval = setInterval(() => {
-                            chargeProgress += 0.1;
-                            boss.beamMesh.material.opacity = chargeProgress * 0.4;
-                            if (chargeProgress >= 1) {
-                                clearInterval(chargeInterval);
-                                // Fire Main Laser Beam
-                                boss.beamFiring = true;
-                                boss.beamMesh.material.opacity = 0.9;
-                                boss.beamMesh.material.color.setHex(0xff0055);
-                                screenShakeTime = 20;
-
-                                setTimeout(() => {
-                                    boss.beamFiring = false;
-                                    boss.beamCharging = false;
-                                    boss.beamMesh.material.opacity = 0;
-                                    boss.beamMesh.material.color.setHex(0xff0000);
-                                }, 1200);
-                            }
-                        }, 100);
-                    } else {
-                        // Homing Plasma Orbs
-                        for (let i = -2; i <= 2; i += 2) {
-                            createEnemyLaser(boss.x + i * 20, boss.y, i * 1.5, -5, 0xffaa00, 14);
-                        }
-                    }
-                } else if (boss.phase === 3) {
-                    // Phase 3: Enraged Death Blossom
-                    const count = 14;
-                    for (let i = 0; i < count; i++) {
-                        const angle = (i * Math.PI * 2 / count) + Math.random() * 0.2;
-                        createEnemyLaser(boss.x, boss.y, Math.cos(angle) * 5.5, Math.sin(angle) * 5.5, 0xff0055, 10);
-                    }
+                const healthRatio = boss.health / boss.maxHealth;
+                if (healthRatio < 0.65 && boss.phase === 1) {
+                    boss.phase = 2;
+                    boss.coreMesh.material.color.setHex(0xffaa00);
+                    triggerExplosion(boss.x, boss.y, 0xffaa00, 60);
+                } else if (healthRatio < 0.3 && boss.phase === 2) {
+                    boss.phase = 3;
+                    boss.coreMesh.material.color.setHex(0xff0000);
+                    boss.vx *= 1.5;
+                    triggerExplosion(boss.x, boss.y, 0xff0000, 80);
                 }
 
-                boss.lastAttack = now;
-            }
+                if (now - boss.lastAttack > (boss.phase === 3 ? 600 : 1100)) {
+                    boss.attackTimer++;
+                    if (boss.phase === 1) {
+                        const count = 8;
+                        for (let i = 0; i < count; i++) {
+                            const angle = (boss.attackTimer * 0.2) + (i * Math.PI * 2 / count);
+                            createEnemyLaser(boss.x, boss.y, Math.cos(angle) * 4, Math.sin(angle) * 4, 0x00e5ff, 12);
+                        }
+                    } else if (boss.phase === 2) {
+                        if (boss.attackTimer % 3 === 0) {
+                            boss.beamCharging = true;
+                            let chargeProgress = 0;
+                            const chargeInterval = setInterval(() => {
+                                chargeProgress += 0.1;
+                                boss.beamMesh.material.opacity = chargeProgress * 0.4;
+                                if (chargeProgress >= 1) {
+                                    clearInterval(chargeInterval);
+                                    boss.beamFiring = true;
+                                    boss.beamMesh.material.opacity = 0.9;
+                                    boss.beamMesh.material.color.setHex(0xff0055);
+                                    screenShakeTime = 20;
 
-            // Check Boss Laser Beam Hit Player
-            if (boss.beamFiring) {
-                if (Math.abs(player.x - boss.x) < 25 && !shieldActive) {
+                                    setTimeout(() => {
+                                        boss.beamFiring = false;
+                                        boss.beamCharging = false;
+                                        boss.beamMesh.material.opacity = 0;
+                                        boss.beamMesh.material.color.setHex(0xff0000);
+                                    }, 1200);
+                                }
+                            }, 100);
+                        } else {
+                            for (let i = -2; i <= 2; i += 2) {
+                                createEnemyLaser(boss.x + i * 20, boss.y, i * 1.5, -5, 0xffaa00, 14);
+                            }
+                        }
+                    } else if (boss.phase === 3) {
+                        const count = 14;
+                        for (let i = 0; i < count; i++) {
+                            const angle = (i * Math.PI * 2 / count) + Math.random() * 0.2;
+                            createEnemyLaser(boss.x, boss.y, Math.cos(angle) * 5.5, Math.sin(angle) * 5.5, 0xff0055, 10);
+                        }
+                    }
+                    boss.lastAttack = now;
+                }
+
+                if (boss.beamFiring && Math.abs(player.x - boss.x) < 25 && !shieldActive) {
                     registerPlayerHit();
+                }
+
+            // --- BOSS 2: CYBER DREADNOUGHT BEHAVIOR ---
+            } else if (boss.type === 1) {
+                boss.x += boss.vx;
+                if (Math.abs(boss.x) > 260) boss.vx *= -1;
+
+                boss.group.position.set(boss.x, boss.y, 0);
+
+                const healthRatio = boss.health / boss.maxHealth;
+                if (healthRatio < 0.6 && boss.phase === 1) {
+                    boss.phase = 2;
+                    boss.coreMesh.material.color.setHex(0xff0055);
+                    triggerExplosion(boss.x, boss.y, 0x7c3aed, 60);
+                } else if (healthRatio < 0.3 && boss.phase === 2) {
+                    boss.phase = 3;
+                    boss.coreMesh.material.color.setHex(0xffea00);
+                    boss.vx *= 1.4;
+                    triggerExplosion(boss.x, boss.y, 0xffea00, 80);
+                }
+
+                if (now - boss.lastAttack > (boss.phase === 3 ? 500 : 900)) {
+                    boss.attackTimer++;
+                    if (boss.phase === 1) {
+                        // Twin Heavy Gatling
+                        createEnemyLaser(boss.x - 65, boss.y - 20, 0, -6, 0x00e5ff, 12);
+                        createEnemyLaser(boss.x + 65, boss.y - 20, 0, -6, 0x00e5ff, 12);
+                    } else if (boss.phase === 2) {
+                        // Sweeping Plasma Waves
+                        const offset = (boss.attackTimer % 5 - 2) * 2;
+                        createEnemyLaser(boss.x - 65, boss.y - 20, offset, -5.5, 0xff0055, 14);
+                        createEnemyLaser(boss.x + 65, boss.y - 20, -offset, -5.5, 0xff0055, 14);
+                    } else if (boss.phase === 3) {
+                        // Triple Salvo Carpet Attack
+                        for (let dir = -1; dir <= 1; dir++) {
+                            createEnemyLaser(boss.x + dir * 50, boss.y - 10, dir * 2, -6, 0xffea00, 14);
+                        }
+                    }
+                    boss.lastAttack = now;
+                }
+
+            // --- BOSS 3: COSMIC WEAVER BEHAVIOR ---
+            } else if (boss.type === 2) {
+                boss.x += Math.sin(now * 0.002) * 3;
+                boss.y = 170 + Math.cos(now * 0.003) * 20;
+
+                boss.group.position.set(boss.x, boss.y, 0);
+                boss.coreMesh.rotation.x += 0.02;
+                boss.coreMesh.rotation.y += 0.03;
+
+                // Animate Orbiting Satellite Drones
+                boss.droneAngle += 0.04;
+                boss.drones.forEach((drone, idx) => {
+                    const angle = boss.droneAngle + (idx * Math.PI * 2 / 3);
+                    drone.position.set(Math.cos(angle) * 80, Math.sin(angle) * 80, 0);
+                    drone.rotation.z += 0.05;
+                });
+
+                const healthRatio = boss.health / boss.maxHealth;
+                if (healthRatio < 0.65 && boss.phase === 1) {
+                    boss.phase = 2;
+                    boss.innerMesh.material.color.setHex(0xff0055);
+                    triggerExplosion(boss.x, boss.y, 0xff00aa, 70);
+                } else if (healthRatio < 0.3 && boss.phase === 2) {
+                    boss.phase = 3;
+                    boss.innerMesh.material.color.setHex(0x00ffff);
+                    triggerExplosion(boss.x, boss.y, 0x00ffff, 90);
+                }
+
+                if (now - boss.lastAttack > (boss.phase === 3 ? 450 : 800)) {
+                    boss.attackTimer++;
+                    if (boss.phase === 1) {
+                        // Drone Directed Lasers
+                        boss.drones.forEach(drone => {
+                            const worldPos = new THREE.Vector3();
+                            drone.getWorldPosition(worldPos);
+                            const dx = player.x - worldPos.x;
+                            const dy = player.y - worldPos.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            createEnemyLaser(worldPos.x, worldPos.y, (dx / dist) * 4.5, (dy / dist) * 4.5, 0x00e5ff, 10);
+                        });
+                    } else if (boss.phase === 2) {
+                        // Radial 360 Blossom Wave
+                        const count = 12;
+                        for (let i = 0; i < count; i++) {
+                            const angle = (i * Math.PI * 2 / count) + boss.droneAngle;
+                            createEnemyLaser(boss.x, boss.y, Math.cos(angle) * 5, Math.sin(angle) * 5, 0xff00aa, 12);
+                        }
+                    } else if (boss.phase === 3) {
+                        // High Speed Multi-Target Chaos Pulsing
+                        const count = 8;
+                        for (let i = 0; i < count; i++) {
+                            const angle = Math.random() * Math.PI * 2;
+                            createEnemyLaser(boss.x, boss.y, Math.cos(angle) * 6, Math.sin(angle) * 6, 0xffff00, 12);
+                        }
+                    }
+                    boss.lastAttack = now;
                 }
             }
         }
@@ -765,8 +949,9 @@
             player.x = 0;
             player.y = -220;
             shieldActive = false;
+            currentBossType = 0;
             bossSpawned = false;
-            gameStartTime = Date.now();
+            nextBossSpawnTime = Date.now() + 25000;
             gameRunning = true;
             gameOverModal.style.display = 'none';
             gameLoop();
@@ -776,10 +961,9 @@
         function update() {
             const now = Date.now();
 
-            // Boss Spawning Trigger
-            if (!boss && !bossSpawned && (now - gameStartTime > bossSpawnTime)) {
-                spawnBoss();
-                bossSpawned = true;
+            // Check Boss Sequence Trigger
+            if (!boss && !bossSpawned && now > nextBossSpawnTime) {
+                spawnBoss(currentBossType);
             }
 
             // Shield status
@@ -793,9 +977,10 @@
             }
 
             // Player Movement Controls
+            const isMovingUp = keys['ArrowUp'] || keys['KeyW'];
             if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
             if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
-            if (keys['ArrowUp'] || keys['KeyW']) player.y += player.speed;
+            if (isMovingUp) player.y += player.speed;
             if (keys['ArrowDown'] || keys['KeyS']) player.y -= player.speed;
 
             // Screen Clamping
@@ -803,6 +988,25 @@
             player.y = Math.max(-BOUNDS.height / 2 + 25, Math.min(BOUNDS.height / 2 - 25, player.y));
 
             player.mesh.position.set(player.x, player.y, 0);
+
+            // --- ANIMATE PLAYER THRUSTERS & PARTICLES ---
+            if (player.thrusterMesh) {
+                const flicker = 0.8 + Math.random() * 0.5;
+                const boostScale = isMovingUp ? 1.6 : 1.0;
+
+                player.thrusterMesh.scale.set(flicker, flicker * boostScale, 1);
+                player.innerFlameMesh.scale.set(flicker * 0.9, flicker * boostScale * 0.9, 1);
+
+                // Spawn thruster particle trail
+                if (Math.random() < (isMovingUp ? 0.8 : 0.4)) {
+                    triggerExplosion(
+                        player.x + (Math.random() - 0.5) * 6,
+                        player.y - 26,
+                        isMovingUp ? 0x00ffff : 0x0088ff,
+                        2
+                    );
+                }
+            }
 
             // Laser Shooting
             if (keys['Space'] && now - lastShotTime > bulletCooldown) {
@@ -874,7 +1078,6 @@
                 b.y += b.vy;
                 b.mesh.position.set(b.x, b.y, 0);
 
-                // Collision with player
                 if (isColliding(b, player)) {
                     scene.remove(b.mesh);
                     registerPlayerHit();
@@ -919,15 +1122,21 @@
 
                     if (boss.health <= 0) {
                         triggerExplosion(boss.x, boss.y, 0xff0055, 120);
-                        score += 5000;
+                        score += 5000 + (boss.type * 2500);
                         scoreEl.textContent = score;
+
                         scene.remove(boss.group);
                         boss = null;
+
+                        // Queue next boss sequence
+                        currentBossType = (currentBossType + 1) % 3;
+                        bossSpawned = false;
+                        nextBossSpawnTime = Date.now() + 20000; // Next boss arrives in 20 seconds
                     }
                 }
             }
 
-            // Player Collision with Enemies
+            // Player Collision with Enemies or Boss
             if (!shieldActive) {
                 enemies.forEach(e => {
                     if (isColliding(player, e)) registerPlayerHit();
