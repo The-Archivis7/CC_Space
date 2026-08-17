@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Space Adventure - Multi-Boss Bloom Edition</title>
+    <title>CC Arcade Hub - Space & Rogue</title>
     <style>
         :root {
             --primary: #4CAF50;
             --primary-hover: #45a049;
             --accent: #00e5ff;
             --danger: #ff5252;
+            --purple: #7c3aed;
             --bg-glass: rgba(10, 15, 30, 0.88);
         }
 
@@ -83,6 +84,37 @@
             text-shadow: 0 0 10px rgba(255, 82, 82, 0.6);
         }
 
+        /* --- Bottom Right Boss UI --- */
+        #boss-tracker-ui {
+            position: absolute;
+            bottom: 15px;
+            right: 20px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            pointer-events: none;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            text-shadow: 0 0 10px rgba(255, 0, 85, 0.6);
+            background: rgba(0, 0, 0, 0.4);
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 0, 85, 0.3);
+        }
+
+        #bosses-beaten {
+            color: #ff0055;
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        .controls-group {
+            display: flex;
+            gap: 10px;
+        }
+
         button {
             pointer-events: auto;
             font-family: inherit;
@@ -106,6 +138,19 @@
             box-shadow: 0 0 22px rgba(0, 229, 255, 0.9);
         }
 
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
+        }
+
         /* --- Overlays & Modals --- */
         .modal {
             position: absolute;
@@ -123,6 +168,73 @@
             display: none;
             z-index: 10;
             min-width: 340px;
+        }
+
+        /* Game Launcher Menu */
+        #game-select-modal {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            width: 380px;
+        }
+
+        #game-select-modal h1 {
+            margin: 0 0 5px 0;
+            font-size: 32px;
+            color: var(--accent);
+            text-shadow: 0 0 15px rgba(0, 229, 255, 0.6);
+            letter-spacing: 1px;
+        }
+
+        #game-select-modal p {
+            margin: 0 0 15px 0;
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        .game-card-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 16px;
+            border-radius: 8px;
+            color: white;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .game-card-btn:hover {
+            background: rgba(0, 229, 255, 0.15);
+            border-color: var(--accent);
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .game-card-btn.rogue:hover {
+            background: rgba(124, 58, 237, 0.2);
+            border-color: var(--purple);
+            box-shadow: 0 0 15px rgba(124, 58, 237, 0.4);
+        }
+
+        .game-title {
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .game-title span {
+            font-size: 11px;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .game-desc {
+            font-size: 12px;
+            color: #ccc;
         }
 
         #game-over-modal h1 {
@@ -231,15 +343,42 @@
                 <div class="stat-item">Score: <span id="score">0</span></div>
                 <div class="stat-item">Lives: <span id="lives">♥♥♥</span></div>
             </div>
-            <button id="upgrade-btn" class="btn-ui">Upgrades (M)</button>
+            <div class="controls-group">
+                <button id="upgrade-btn" class="btn-ui">Upgrades (M)</button>
+                <button id="menu-btn" class="btn-secondary">Game Menu</button>
+            </div>
+        </div>
+
+        <!-- Bottom Right Boss Defeat Counter -->
+        <div id="boss-tracker-ui">
+            Bosses Defeated: <span id="bosses-beaten">0</span>
         </div>
 
         <div id="boss-warning">WARNING: BOSS APPROACHING</div>
 
+        <!-- Main Launcher Menu -->
+        <div id="game-select-modal" class="modal">
+            <h1>CC ARCADE HUB</h1>
+            <p>Select a mission module to launch:</p>
+            
+            <button class="game-card-btn" id="launch-space-btn">
+                <div class="game-title">CC Space <span>ACTIVE</span></div>
+                <div class="game-desc">3D Space shooter with intense bosses, scaling upgrades, and bloom effects.</div>
+            </button>
+
+            <button class="game-card-btn rogue" id="launch-rogue-btn">
+                <div class="game-title" style="color: #a78bfa;">CC Rogue <span>FILE: rogue.html</span></div>
+                <div class="game-desc">Navigate dungeon corridors, vanquish enemies, and survive the depth.</div>
+            </button>
+        </div>
+
         <div id="game-over-modal" class="modal">
             <h1>GAME OVER</h1>
             <p>Final Score: <span id="final-score">0</span></p>
-            <button id="restart" class="btn-primary">Play Again</button>
+            <div style="display:flex; gap:10px; justify-content:center;">
+                <button id="restart" class="btn-primary">Play Again</button>
+                <button id="game-over-menu-btn" class="btn-secondary" style="margin-top:15px; padding:12px 20px;">Main Menu</button>
+            </div>
         </div>
 
         <div id="upgrade-menu" class="modal">
@@ -261,7 +400,7 @@
                     Invincibility (5s) <span class="cost-tag">150 pts</span>
                 </button>
                 <button class="btn-upgrade" data-upgrade="multiShot">
-                    Spread Shot <span class="cost-tag">200 pts</span>
+                    +3 Spread Shot <span class="cost-tag">200 pts</span>
                 </button>
             </div>
             <button id="close-upgrade" class="btn-primary" style="width: 100%;">Resume Mission</button>
@@ -275,19 +414,27 @@
         // --- UI References ---
         const scoreEl = document.getElementById('score');
         const livesEl = document.getElementById('lives');
+        const bossesBeatenEl = document.getElementById('bosses-beaten');
         const gameOverModal = document.getElementById('game-over-modal');
+        const gameSelectModal = document.getElementById('game-select-modal');
         const finalScoreEl = document.getElementById('final-score');
         const restartBtn = document.getElementById('restart');
         const upgradeBtn = document.getElementById('upgrade-btn');
+        const menuBtn = document.getElementById('menu-btn');
+        const gameOverMenuBtn = document.getElementById('game-over-menu-btn');
         const upgradeMenu = document.getElementById('upgrade-menu');
         const closeUpgradeBtn = document.getElementById('close-upgrade');
         const bossWarningEl = document.getElementById('boss-warning');
+        const launchSpaceBtn = document.getElementById('launch-space-btn');
+        const launchRogueBtn = document.getElementById('launch-rogue-btn');
 
         // --- State Variables ---
         let score = 0;
         let lives = 3;
         let maxLives = 3;
-        let gameRunning = true;
+        let bossesBeaten = 0; // Track total bosses defeated
+        let gameRunning = false;
+        let gameInitialized = false;
         let lastShotTime = 0;
         let bulletCooldown = 200;
         let enemyBulletCooldown = 1800;
@@ -309,10 +456,11 @@
 
         const keys = {};
 
-        // --- Boss Sequence State ---
-        let currentBossType = 0; // 0: Void Sentinel, 1: Cyber Dreadnought, 2: Cosmic Weaver
-        let nextBossSpawnTime = Date.now() + 25000; // First boss spawns after 25s
+        // --- Boss Sequence & Scaling State ---
+        let currentBossType = 0;
+        let nextBossSpawnTime = Date.now() + 25000;
         let bossSpawned = false;
+        let bossClearCount = 0;
 
         // --- Three.js & WebGL Bloom Setup ---
         const container = document.getElementById('game-container');
@@ -336,9 +484,9 @@
         const renderScene = new THREE.RenderPass(scene, camera);
         const bloomPass = new THREE.UnrealBloomPass(
             new THREE.Vector2(BOUNDS.width, BOUNDS.height),
-            1.8,  // Bloom Strength
-            0.4,  // Radius
-            0.1   // Threshold
+            2.0,
+            0.4,
+            0.1
         );
 
         const composer = new THREE.EffectComposer(renderer);
@@ -366,8 +514,8 @@
         const starField = new THREE.Points(starGeo, starMat);
         scene.add(starField);
 
-        // --- Particle System for Explosions & Sparks ---
-        const maxParticles = 400;
+        // --- Particle System for Explosions & Exhaust Trail ---
+        const maxParticles = 500;
         const particleGeo = new THREE.BufferGeometry();
         const particlePositions = new Float32Array(maxParticles * 3);
         const particleVelocities = [];
@@ -383,7 +531,7 @@
         particleGeo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
 
         const particleMat = new THREE.PointsMaterial({
-            size: 5,
+            size: 6,
             vertexColors: true,
             transparent: true,
             blending: THREE.AdditiveBlending
@@ -391,7 +539,7 @@
         const particleSystem = new THREE.Points(particleGeo, particleMat);
         scene.add(particleSystem);
 
-        function triggerExplosion(x, y, colorHex = 0xffaa00, count = 25) {
+        function triggerExplosion(x, y, colorHex = 0xffaa00, count = 25, spreadVelocity = 6) {
             const positions = particleGeo.attributes.position.array;
             const colors = particleGeo.attributes.color.array;
             const c = new THREE.Color(colorHex);
@@ -404,14 +552,14 @@
                     positions[i * 3 + 2] = 10;
 
                     const angle = Math.random() * Math.PI * 2;
-                    const speed = 1.5 + Math.random() * 6;
+                    const speed = 0.8 + Math.random() * spreadVelocity;
                     particleVelocities[i].set(Math.cos(angle) * speed, Math.sin(angle) * speed, 0);
 
                     particleLifes[i] = 1.0;
 
-                    colors[i * 3] = c.r * 2.0; // Boosted brightness for Bloom
-                    colors[i * 3 + 1] = c.g * 2.0;
-                    colors[i * 3 + 2] = c.b * 2.0;
+                    colors[i * 3] = c.r * 2.2;
+                    colors[i * 3 + 1] = c.g * 2.2;
+                    colors[i * 3 + 2] = c.b * 2.2;
 
                     spawned++;
                 }
@@ -424,7 +572,7 @@
             const positions = particleGeo.attributes.position.array;
             for (let i = 0; i < maxParticles; i++) {
                 if (particleLifes[i] > 0) {
-                    particleLifes[i] -= 0.03;
+                    particleLifes[i] -= 0.035;
                     positions[i * 3] += particleVelocities[i].x;
                     positions[i * 3 + 1] += particleVelocities[i].y;
 
@@ -445,52 +593,60 @@
             speed: 6,
             mesh: null,
             shieldMesh: null,
-            thrusterMesh: null,
-            innerFlameMesh: null
+            thrusterOuterMesh: null,
+            thrusterInnerMesh: null,
+            thrusterCoreMesh: null
         };
 
         function createPlayerMesh() {
             const group = new THREE.Group();
 
-            // Ship Main Body
             const bodyGeo = new THREE.ConeGeometry(22, 44, 4);
             const bodyMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
             const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
             group.add(bodyMesh);
 
-            // Engine Core Glow
             const engineGeo = new THREE.SphereGeometry(8, 8, 8);
-            const engineMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+            const engineMat = new THREE.MeshBasicMaterial({ color: 0xff00ff });
             const engineMesh = new THREE.Mesh(engineGeo, engineMat);
             engineMesh.position.y = -18;
             group.add(engineMesh);
 
-            // --- ANIMATED THRUSTERS / BOOSTER ---
-            const thrusterGeo = new THREE.ConeGeometry(6, 24, 8);
-            thrusterGeo.rotateX(Math.PI); // Point downwards
-            const thrusterMat = new THREE.MeshBasicMaterial({
-                color: 0x00e5ff,
+            const outerGeo = new THREE.ConeGeometry(9, 36, 12);
+            outerGeo.rotateX(Math.PI);
+            const outerMat = new THREE.MeshBasicMaterial({
+                color: 0xff00aa,
                 transparent: true,
-                opacity: 0.9,
+                opacity: 0.85,
                 blending: THREE.AdditiveBlending
             });
-            const thrusterMesh = new THREE.Mesh(thrusterGeo, thrusterMat);
-            thrusterMesh.position.y = -28;
-            group.add(thrusterMesh);
+            const thrusterOuterMesh = new THREE.Mesh(outerGeo, outerMat);
+            thrusterOuterMesh.position.y = -34;
+            group.add(thrusterOuterMesh);
 
-            // Inner Intense Thruster Flame Core
-            const innerFlameGeo = new THREE.ConeGeometry(3, 16, 8);
-            innerFlameGeo.rotateX(Math.PI);
-            const innerFlameMat = new THREE.MeshBasicMaterial({
+            const innerGeo = new THREE.ConeGeometry(5.5, 26, 12);
+            innerGeo.rotateX(Math.PI);
+            const innerMat = new THREE.MeshBasicMaterial({
+                color: 0xff6600,
+                transparent: true,
+                opacity: 0.95,
+                blending: THREE.AdditiveBlending
+            });
+            const thrusterInnerMesh = new THREE.Mesh(innerGeo, innerMat);
+            thrusterInnerMesh.position.y = -29;
+            group.add(thrusterInnerMesh);
+
+            const coreGeo = new THREE.ConeGeometry(2.5, 18, 8);
+            coreGeo.rotateX(Math.PI);
+            const coreMat = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 transparent: true,
-                opacity: 0.95
+                opacity: 1.0
             });
-            const innerFlameMesh = new THREE.Mesh(innerFlameGeo, innerFlameMat);
-            innerFlameMesh.position.y = -24;
-            group.add(innerFlameMesh);
+            const thrusterCoreMesh = new THREE.Mesh(coreGeo, coreMat);
+            thrusterCoreMesh.position.y = -25;
+            group.add(thrusterCoreMesh);
 
-            // Shield Mesh
             const shieldGeo = new THREE.RingGeometry(28, 32, 32);
             const shieldMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
             const shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
@@ -499,8 +655,9 @@
 
             player.mesh = group;
             player.shieldMesh = shieldMesh;
-            player.thrusterMesh = thrusterMesh;
-            player.innerFlameMesh = innerFlameMesh;
+            player.thrusterOuterMesh = thrusterOuterMesh;
+            player.thrusterInnerMesh = thrusterInnerMesh;
+            player.thrusterCoreMesh = thrusterCoreMesh;
             scene.add(group);
         }
         createPlayerMesh();
@@ -525,6 +682,11 @@
             const mat = new THREE.MeshBasicMaterial({ color: 0xffea00 });
             const mesh = new THREE.Mesh(geo, mat);
             mesh.position.set(x, y, 0);
+
+            if (vx !== 0) {
+                mesh.rotation.z = -Math.atan2(vx, baseBulletSpeed);
+            }
+
             scene.add(mesh);
 
             bullets.push({
@@ -547,23 +709,23 @@
             });
         }
 
-        // ============================================================================
-        // MULTI-BOSS CREATION ENGINE
-        // ============================================================================
+        // --- Boss Creation Engine ---
         function spawnBoss(typeIndex) {
             enemies.forEach(e => scene.remove(e.mesh));
             enemies = [];
 
             const group = new THREE.Group();
             let name = "";
-            let maxHealth = 2000;
+            let baseHealth = 2000;
             let width = 120;
             let height = 120;
 
+            const healthMultiplier = 1 + bossClearCount;
+            const speedMultiplier = 1 + (bossClearCount * 0.15);
+
             if (typeIndex === 0) {
-                // --- BOSS 1: VOID SENTINEL (Octahedron & Energy Rings) ---
-                name = "VOID SENTINEL";
-                maxHealth = 2000;
+                name = bossClearCount > 0 ? `VOID SENTINEL MK-${bossClearCount + 1}` : "VOID SENTINEL";
+                baseHealth = 2000;
 
                 const frameGeo = new THREE.OctahedronGeometry(60, 0);
                 const frameMat = new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true });
@@ -586,25 +748,23 @@
                 beamMesh.position.y = -BOUNDS.height / 2;
                 group.add(beamMesh);
 
+                const scaledHealth = Math.floor(baseHealth * healthMultiplier);
                 boss = {
-                    type: 0, name, x: 0, y: 180, width, height, health: maxHealth, maxHealth,
+                    type: 0, name, x: 0, y: 180, width, height, health: scaledHealth, maxHealth: scaledHealth,
                     phase: 1, group, frameMesh, coreMesh, ringMesh, beamMesh,
-                    lastAttack: Date.now(), attackTimer: 0, beamCharging: false, beamFiring: false, vx: 2.5
+                    lastAttack: Date.now(), attackTimer: 0, beamCharging: false, beamFiring: false, vx: 2.5 * speedMultiplier
                 };
 
             } else if (typeIndex === 1) {
-                // --- BOSS 2: CYBER DREADNOUGHT (Heavy Armored Gunship) ---
-                name = "CYBER DREADNOUGHT";
-                maxHealth = 3200;
+                name = bossClearCount > 0 ? `CYBER DREADNOUGHT MK-${bossClearCount + 1}` : "CYBER DREADNOUGHT";
+                baseHealth = 3200;
                 width = 160; height = 100;
 
-                // Main Armor Hull
                 const hullGeo = new THREE.BoxGeometry(140, 50, 30);
                 const hullMat = new THREE.MeshBasicMaterial({ color: 0x7c3aed });
                 const hullMesh = new THREE.Mesh(hullGeo, hullMat);
                 group.add(hullMesh);
 
-                // Twin Wing Heavy Cannons
                 const cannonGeo = new THREE.CylinderGeometry(8, 12, 60);
                 const cannonMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
                 const leftCannon = new THREE.Mesh(cannonGeo, cannonMat);
@@ -614,25 +774,23 @@
                 group.add(leftCannon);
                 group.add(rightCannon);
 
-                // Glowing Reactor Core
                 const coreGeo = new THREE.BoxGeometry(30, 30, 35);
                 const coreMat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
                 const coreMesh = new THREE.Mesh(coreGeo, coreMat);
                 group.add(coreMesh);
 
+                const scaledHealth = Math.floor(baseHealth * healthMultiplier);
                 boss = {
-                    type: 1, name, x: 0, y: 180, width, height, health: maxHealth, maxHealth,
+                    type: 1, name, x: 0, y: 180, width, height, health: scaledHealth, maxHealth: scaledHealth,
                     phase: 1, group, hullMesh, leftCannon, rightCannon, coreMesh,
-                    lastAttack: Date.now(), attackTimer: 0, vx: 3.5, dashTargetX: 0
+                    lastAttack: Date.now(), attackTimer: 0, vx: 3.5 * speedMultiplier, dashTargetX: 0
                 };
 
             } else if (typeIndex === 2) {
-                // --- BOSS 3: COSMIC WEAVER (Icosahedron Core + Satellites) ---
-                name = "COSMIC WEAVER";
-                maxHealth = 4500;
+                name = bossClearCount > 0 ? `COSMIC WEAVER MK-${bossClearCount + 1}` : "COSMIC WEAVER";
+                baseHealth = 4500;
                 width = 140; height = 140;
 
-                // Central Nexus
                 const coreGeo = new THREE.IcosahedronGeometry(45, 0);
                 const coreMat = new THREE.MeshBasicMaterial({ color: 0xff00aa, wireframe: true });
                 const coreMesh = new THREE.Mesh(coreGeo, coreMat);
@@ -643,7 +801,6 @@
                 const innerMesh = new THREE.Mesh(innerGeo, innerMat);
                 group.add(innerMesh);
 
-                // 3 Orbiting Satellites (Drones)
                 const drones = [];
                 for (let i = 0; i < 3; i++) {
                     const droneGeo = new THREE.DodecahedronGeometry(12);
@@ -653,29 +810,27 @@
                     drones.push(droneMesh);
                 }
 
+                const scaledHealth = Math.floor(baseHealth * healthMultiplier);
                 boss = {
-                    type: 2, name, x: 0, y: 170, width, height, health: maxHealth, maxHealth,
+                    type: 2, name, x: 0, y: 170, width, height, health: scaledHealth, maxHealth: scaledHealth,
                     phase: 1, group, coreMesh, innerMesh, drones,
-                    lastAttack: Date.now(), attackTimer: 0, vx: 2.0, droneAngle: 0
+                    lastAttack: Date.now(), attackTimer: 0, vx: 2.0 * speedMultiplier, droneAngle: 0
                 };
             }
 
             scene.add(group);
 
-            bossWarningEl.textContent = `WARNING: ${name} APPROACHING`;
+            bossWarningEl.textContent = `WARNING: ${name} APPROACHING (HP x${healthMultiplier})`;
             bossWarningEl.style.display = 'block';
             setTimeout(() => { bossWarningEl.style.display = 'none'; }, 3000);
             bossSpawned = true;
         }
 
-        // ============================================================================
-        // BOSS UPDATE & BEHAVIOR CONTROLLER
-        // ============================================================================
+        // --- Boss Update Controller ---
         function updateBoss() {
             if (!boss) return;
             const now = Date.now();
 
-            // --- BOSS 1: VOID SENTINEL BEHAVIOR ---
             if (boss.type === 0) {
                 boss.x += boss.vx;
                 if (Math.abs(boss.x) > 280) boss.vx *= -1;
@@ -745,7 +900,6 @@
                     registerPlayerHit();
                 }
 
-            // --- BOSS 2: CYBER DREADNOUGHT BEHAVIOR ---
             } else if (boss.type === 1) {
                 boss.x += boss.vx;
                 if (Math.abs(boss.x) > 260) boss.vx *= -1;
@@ -767,16 +921,13 @@
                 if (now - boss.lastAttack > (boss.phase === 3 ? 500 : 900)) {
                     boss.attackTimer++;
                     if (boss.phase === 1) {
-                        // Twin Heavy Gatling
                         createEnemyLaser(boss.x - 65, boss.y - 20, 0, -6, 0x00e5ff, 12);
                         createEnemyLaser(boss.x + 65, boss.y - 20, 0, -6, 0x00e5ff, 12);
                     } else if (boss.phase === 2) {
-                        // Sweeping Plasma Waves
                         const offset = (boss.attackTimer % 5 - 2) * 2;
                         createEnemyLaser(boss.x - 65, boss.y - 20, offset, -5.5, 0xff0055, 14);
                         createEnemyLaser(boss.x + 65, boss.y - 20, -offset, -5.5, 0xff0055, 14);
                     } else if (boss.phase === 3) {
-                        // Triple Salvo Carpet Attack
                         for (let dir = -1; dir <= 1; dir++) {
                             createEnemyLaser(boss.x + dir * 50, boss.y - 10, dir * 2, -6, 0xffea00, 14);
                         }
@@ -784,7 +935,6 @@
                     boss.lastAttack = now;
                 }
 
-            // --- BOSS 3: COSMIC WEAVER BEHAVIOR ---
             } else if (boss.type === 2) {
                 boss.x += Math.sin(now * 0.002) * 3;
                 boss.y = 170 + Math.cos(now * 0.003) * 20;
@@ -793,7 +943,6 @@
                 boss.coreMesh.rotation.x += 0.02;
                 boss.coreMesh.rotation.y += 0.03;
 
-                // Animate Orbiting Satellite Drones
                 boss.droneAngle += 0.04;
                 boss.drones.forEach((drone, idx) => {
                     const angle = boss.droneAngle + (idx * Math.PI * 2 / 3);
@@ -815,7 +964,6 @@
                 if (now - boss.lastAttack > (boss.phase === 3 ? 450 : 800)) {
                     boss.attackTimer++;
                     if (boss.phase === 1) {
-                        // Drone Directed Lasers
                         boss.drones.forEach(drone => {
                             const worldPos = new THREE.Vector3();
                             drone.getWorldPosition(worldPos);
@@ -825,14 +973,12 @@
                             createEnemyLaser(worldPos.x, worldPos.y, (dx / dist) * 4.5, (dy / dist) * 4.5, 0x00e5ff, 10);
                         });
                     } else if (boss.phase === 2) {
-                        // Radial 360 Blossom Wave
                         const count = 12;
                         for (let i = 0; i < count; i++) {
                             const angle = (i * Math.PI * 2 / count) + boss.droneAngle;
                             createEnemyLaser(boss.x, boss.y, Math.cos(angle) * 5, Math.sin(angle) * 5, 0xff00aa, 12);
                         }
                     } else if (boss.phase === 3) {
-                        // High Speed Multi-Target Chaos Pulsing
                         const count = 8;
                         for (let i = 0; i < count; i++) {
                             const angle = Math.random() * Math.PI * 2;
@@ -843,6 +989,34 @@
                 }
             }
         }
+
+        // --- Navigation & Launcher Controls ---
+        launchSpaceBtn.addEventListener('click', () => {
+            gameSelectModal.style.display = 'none';
+            if (!gameInitialized) {
+                gameInitialized = true;
+                restartGame();
+            } else {
+                gameRunning = true;
+                gameLoop();
+            }
+        });
+
+        launchRogueBtn.addEventListener('click', () => {
+            window.location.href = 'rogue.html';
+        });
+
+        menuBtn.addEventListener('click', () => {
+            gameRunning = false;
+            upgradeMenu.style.display = 'none';
+            gameOverModal.style.display = 'none';
+            gameSelectModal.style.display = 'flex';
+        });
+
+        gameOverMenuBtn.addEventListener('click', () => {
+            gameOverModal.style.display = 'none';
+            gameSelectModal.style.display = 'flex';
+        });
 
         // --- Controls & Upgrades ---
         window.addEventListener('keydown', e => {
@@ -866,6 +1040,10 @@
             document.querySelectorAll('.btn-upgrade').forEach(btn => {
                 const type = btn.dataset.upgrade;
                 btn.disabled = score < upgrades[type].cost;
+                const tag = btn.querySelector('.cost-tag');
+                if (tag) {
+                    tag.textContent = `${upgrades[type].cost} pts${upgrades[type].level > 0 ? ` (Lvl ${upgrades[type].level})` : ''}`;
+                }
             });
         }
 
@@ -888,24 +1066,32 @@
             switch (type) {
                 case 'firingSpeed':
                     bulletCooldown = Math.max(60, bulletCooldown - 25);
+                    up.cost = Math.floor(up.cost * 1.4);
                     break;
                 case 'health':
                     maxLives++;
                     lives = maxLives;
                     livesEl.innerHTML = '♥'.repeat(lives);
+                    up.cost = Math.floor(up.cost * 1.5);
                     break;
                 case 'movementSpeed':
                     player.speed += 1.2;
+                    up.cost = Math.floor(up.cost * 1.3);
                     break;
                 case 'bulletSpeed':
                     baseBulletSpeed += 2.5;
+                    up.cost = Math.floor(up.cost * 1.3);
                     break;
                 case 'shield':
                     shieldActive = true;
                     shieldEndTime = Date.now() + 5000;
+                    up.cost = Math.floor(up.cost * 1.5);
+                    break;
+                case 'multiShot':
+                    up.cost = Math.floor(up.cost * 1.6);
                     break;
             }
-            toggleUpgradeMenu(false);
+            updateUpgradeButtons();
         }
 
         function registerPlayerHit() {
@@ -921,7 +1107,6 @@
                 finalScoreEl.textContent = score;
                 gameOverModal.style.display = 'block';
             } else {
-                // Temporary Invincibility
                 shieldActive = true;
                 shieldEndTime = Date.now() + 1500;
             }
@@ -930,6 +1115,8 @@
         function restartGame() {
             score = 0;
             lives = maxLives;
+            bossesBeaten = 0;
+            bossesBeatenEl.textContent = bossesBeaten;
             livesEl.innerHTML = '♥'.repeat(lives);
             scoreEl.textContent = score;
 
@@ -950,6 +1137,7 @@
             player.y = -220;
             shieldActive = false;
             currentBossType = 0;
+            bossClearCount = 0;
             bossSpawned = false;
             nextBossSpawnTime = Date.now() + 25000;
             gameRunning = true;
@@ -961,12 +1149,10 @@
         function update() {
             const now = Date.now();
 
-            // Check Boss Sequence Trigger
             if (!boss && !bossSpawned && now > nextBossSpawnTime) {
                 spawnBoss(currentBossType);
             }
 
-            // Shield status
             if (shieldActive) {
                 player.shieldMesh.visible = true;
                 player.shieldMesh.rotation.z += 0.05;
@@ -976,46 +1162,52 @@
                 }
             }
 
-            // Player Movement Controls
             const isMovingUp = keys['ArrowUp'] || keys['KeyW'];
             if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
             if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
             if (isMovingUp) player.y += player.speed;
             if (keys['ArrowDown'] || keys['KeyS']) player.y -= player.speed;
 
-            // Screen Clamping
             player.x = Math.max(-BOUNDS.width / 2 + 25, Math.min(BOUNDS.width / 2 - 25, player.x));
             player.y = Math.max(-BOUNDS.height / 2 + 25, Math.min(BOUNDS.height / 2 - 25, player.y));
 
             player.mesh.position.set(player.x, player.y, 0);
 
-            // --- ANIMATE PLAYER THRUSTERS & PARTICLES ---
-            if (player.thrusterMesh) {
-                const flicker = 0.8 + Math.random() * 0.5;
-                const boostScale = isMovingUp ? 1.6 : 1.0;
+            if (player.thrusterOuterMesh) {
+                const flicker = 0.85 + Math.random() * 0.45;
+                const boostScale = isMovingUp ? 1.8 : 1.0;
 
-                player.thrusterMesh.scale.set(flicker, flicker * boostScale, 1);
-                player.innerFlameMesh.scale.set(flicker * 0.9, flicker * boostScale * 0.9, 1);
+                player.thrusterOuterMesh.scale.set(flicker * 1.1, flicker * boostScale * 1.3, 1);
+                player.thrusterInnerMesh.scale.set(flicker * 0.9, flicker * boostScale * 1.1, 1);
+                player.thrusterCoreMesh.scale.set(flicker * 0.8, flicker * boostScale * 0.9, 1);
 
-                // Spawn thruster particle trail
-                if (Math.random() < (isMovingUp ? 0.8 : 0.4)) {
+                if (Math.random() < (isMovingUp ? 0.95 : 0.6)) {
+                    const particleColor = Math.random() < 0.6 ? 0xff00aa : 0xff6600;
                     triggerExplosion(
-                        player.x + (Math.random() - 0.5) * 6,
-                        player.y - 26,
-                        isMovingUp ? 0x00ffff : 0x0088ff,
-                        2
+                        player.x + (Math.random() - 0.5) * 8,
+                        player.y - 32,
+                        particleColor,
+                        2,
+                        2.5
                     );
                 }
             }
 
-            // Laser Shooting
             if (keys['Space'] && now - lastShotTime > bulletCooldown) {
-                if (upgrades.multiShot.level > 0) {
-                    createPlayerLaser(player.x - 12, player.y + 15, -1.5);
+                const level = upgrades.multiShot.level;
+                if (level === 0) {
                     createPlayerLaser(player.x, player.y + 20, 0);
-                    createPlayerLaser(player.x + 12, player.y + 15, 1.5);
                 } else {
-                    createPlayerLaser(player.x, player.y + 20, 0);
+                    const totalShots = 1 + level * 3;
+                    const spreadSpan = Math.min(120, 30 + level * 15);
+                    const maxVx = Math.min(5.5, 1.5 + level * 0.8);
+
+                    for (let i = 0; i < totalShots; i++) {
+                        const pct = i / (totalShots - 1);
+                        const offsetX = (pct - 0.5) * spreadSpan;
+                        const vx = (pct - 0.5) * (maxVx * 2);
+                        createPlayerLaser(player.x + offsetX, player.y + 20, vx);
+                    }
                 }
                 lastShotTime = now;
             }
@@ -1097,7 +1289,6 @@
             for (let bIdx = bullets.length - 1; bIdx >= 0; bIdx--) {
                 const b = bullets[bIdx];
 
-                // Hit Regular Enemies
                 for (let eIdx = enemies.length - 1; eIdx >= 0; eIdx--) {
                     const e = enemies[eIdx];
                     if (isColliding(b, e)) {
@@ -1122,21 +1313,25 @@
 
                     if (boss.health <= 0) {
                         triggerExplosion(boss.x, boss.y, 0xff0055, 120);
-                        score += 5000 + (boss.type * 2500);
+                        
+                        score += 500;
                         scoreEl.textContent = score;
+
+                        // Increment Boss Defeat Variable & Update UI
+                        bossesBeaten++;
+                        bossesBeatenEl.textContent = bossesBeaten;
 
                         scene.remove(boss.group);
                         boss = null;
 
-                        // Queue next boss sequence
+                        bossClearCount++;
                         currentBossType = (currentBossType + 1) % 3;
                         bossSpawned = false;
-                        nextBossSpawnTime = Date.now() + 20000; // Next boss arrives in 20 seconds
+                        nextBossSpawnTime = Date.now() + 20000;
                     }
                 }
             }
 
-            // Player Collision with Enemies or Boss
             if (!shieldActive) {
                 enemies.forEach(e => {
                     if (isColliding(player, e)) registerPlayerHit();
@@ -1144,7 +1339,6 @@
                 if (boss && isColliding(player, boss)) registerPlayerHit();
             }
 
-            // Starfield Motion
             const positions = starGeo.attributes.position.array;
             for (let i = 0; i < starCount; i++) {
                 positions[i * 3 + 1] -= starSpeeds[i];
@@ -1156,7 +1350,6 @@
 
             updateParticles();
 
-            // Camera Screen Shake
             if (screenShakeTime > 0) {
                 camera.position.x = (Math.random() - 0.5) * screenShakeTime * 0.8;
                 camera.position.y = (Math.random() - 0.5) * screenShakeTime * 0.8;
@@ -1175,8 +1368,9 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // Start Game Engine
-        gameLoop();
+        // Show Arcade Launcher Menu on load
+        gameSelectModal.style.display = 'flex';
+        composer.render();
     </script>
 </body>
 </html>
