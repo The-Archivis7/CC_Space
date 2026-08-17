@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arcane Mastery - 2D WebGL Spellcaster</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body {
+    background: #030308;
+    color: #e2e8f0;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  #game-wrapper {
+    position: relative;
+    width: 960px;
+    height: 640px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 0 50px rgba(120, 50, 255, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    background: #05050d;
+  }
+
+  canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+  /* UI Overlays */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(6, 6, 14, 0.88);
+    backdrop-filter: blur(12px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 30;
+    transition: opacity 0.3s ease;
+  }
+
+  .hidden { display: none !important; }
+
+  h1 {
+    font-size: 40px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    background: linear-gradient(135deg, #c084fc, #60a5fa, #f472b6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 6px;
+  }
+
+  p.subtitle { font-size: 14px; color: #94a3b8; margin-bottom: 24px; }
+
+  .card {
+    background: rgba(18, 18, 32, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 24px;
+    width: 380px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  }
+
+  label { font-size: 11px; font-weight: 700; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1px; }
+
+  input[type="text"] {
+    width: 100%;
+    background: #0d0d1a;
+    border: 1px solid #3f3f5a;
+    color: #f4f4f5;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type="text"]:focus { border-color: #a855f7; }
+
+  .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .btn-preset {
+    background: #18182b;
+    border: 1px solid #2e2e4a;
+    color: #cbd5e1;
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-preset:hover { background: #282846; border-color: #a855f7; color: #fff; }
+
+  .info-badge {
+    background: rgba(168, 85, 247, 0.12);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    color: #e9d5ff;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  .btn-action {
+    background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+    color: #fff;
+    border: none;
+    padding: 12px;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
+  }
+  .btn-action:hover { transform: translateY(-1px); box-shadow: 0 6px 22px rgba(139, 92, 246, 0.6); }
+
+  /* In-Game HUD & Spellbook Bar */
+  #hud {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .hud-panel {
+    background: rgba(10, 10, 22, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    pointer-events: auto;
+  }
+
+  #spell-bar {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    background: rgba(10, 10, 22, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(10px);
+    padding: 8px 12px;
+    border-radius: 12px;
+    z-index: 10;
+  }
+
+  .spell-slot {
+    width: 52px;
+    height: 52px;
+    border-radius: 8px;
+    border: 2px solid #2e2e4a;
+    background: #0f0f1f;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .spell-slot.active { border-color: #a855f7; box-shadow: 0 0 12px rgba(168, 85, 247, 0.5); background: #1a102f; }
+  .spell-slot.locked { opacity: 0.35; cursor: not-allowed; filter: grayscale(1); }
+  .spell-slot .icon { font-size: 20px; }
+  .spell-slot .key { position: absolute; top: 2px; left: 4px; font-size: 9px; font-weight: 700; color: #94a3b8; }
+  .spell-slot .name { font-size: 9px; color: #cbd5e1; margin-top: 2px; }
+
+  .unlock-toast {
+    position: absolute;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.9), rgba(59, 130, 246, 0.9));
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 10px 20px;
+    border-radius: 30px;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.6);
+    z-index: 20;
+    pointer-events: none;
+    animation: popup 3s forwards;
+  }
+
+  @keyframes popup {
+    0% { opacity: 0; transform: translate(-50%, -10px) scale(0.9); }
+    15% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    85% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -20px) scale(0.9); }
+  }
+</style>
+</head>
+<body>
+
+<div id="game-wrapper">
+  <!-- START MENU -->
+  <div id="start-menu" class="overlay">
+    <h1>Arcane Mastery</h1>
+    <p class="subtitle">Discover Ancient Spells &amp; Conquer the Realm</p>
+    
+    <div class="card">
+      <label for="username-input">Caster Identity</label>
+      <input type="text" id="username-input" value="archivis7" maxlength="16" spellcheck="false">
+      
+      <label>Quick Load Profile</label>
+      <div class="presets">
+        <button class="btn-preset" onclick="setProfile('The_Corvid')">The_Corvid</button>
+        <button class="btn-preset" onclick="setProfile('archivis7')">archivis7</button>
+        <button class="btn-preset" onclick="setProfile('AJTech')">AJTech</button>
+        <button class="btn-preset" onclick="setProfile('someone')">someone</button>
+      </div>
+
+      <div id="profile-info" class="info-badge">Evaluating Arcane Signature...</div>
+
+      <button class="btn-action" onclick="startGame()">BEGIN RUN</button>
+    </div>
+  </div>
+
+  <!-- LEVEL CLEAR MENU -->
+  <div id="clear-menu" class="overlay hidden">
+    <h1 id="clear-title">Realm Cleared!</h1>
+    <p id="clear-sub" class="subtitle">Progress Saved to Grimoire</p>
+    <button class="btn-action" style="width:220px;" onclick="nextLevel()">NEXT REALM</button>
+  </div>
+
+  <!-- HUD & SPELL SLOTS -->
+  <div id="hud">
+    <div class="hud-panel">
+      <div style="font-weight:700; color:#c084fc;" id="realm-name">Realm 1</div>
+      <div style="color:#94a3b8; font-size:12px;">Level <span id="hud-lvl" style="color:#fff;">1</span> | Max Cleared: <span id="hud-max" style="color:#fff;">0</span></div>
+    </div>
+    <div class="hud-panel" id="hud-cosmetic" style="color:#e2e8f0; font-size:12px;"></div>
+    <button class="hud-panel" style="cursor:pointer;" onclick="showMenu()">Menu</button>
+  </div>
+
+  <!-- SPELLBAR -->
+  <div id="spell-bar"></div>
+
+  <canvas id="glCanvas" width="960" height="640"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById('glCanvas');
+const gl = canvas.getContext('webgl2', { alpha: false, antialias: true });
+
+if (!gl) alert('WebGL 2.0 required.');
+
+// Enable Additive Blending for Magic Glows
+gl.enable(gl.BLEND);
+gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+// Game State Variables
+let activeUser = 'archivis7';
+let currentLevel = 1;
+let maxLevel = parseInt(localStorage.getItem('spell_max_level') || '0', 10);
+let isPlaying = false;
+let gameTime = 0;
+let activeSpellIndex = 0;
+
+let targets = [];
+let spells = [];
+let particles = [];
+let lightBeams = [];
+
+// Spell Book Definitions (Discoverable Spells)
+const SPELL_BOOK = [
+  { id: 'arcane', name: 'Arcane Orb', key: '1', icon: '🔮', unlockLvl: 1, color: [0.3, 0.8, 1.0, 1.0], speed: 0.05, radius: 12, damage: 1, desc: 'Fast precision arcane strike.' },
+  { id: 'fireball', name: 'Inferno', key: '2', icon: '🔥', unlockLvl: 2, color: [1.0, 0.4, 0.1, 1.0], speed: 0.035, radius: 22, damage: 2, desc: 'High damage explosive fireball.' },
+  { id: 'lightning', name: 'Chain Volt', key: '3', icon: '⚡', unlockLvl: 3, color: [0.9, 0.9, 0.2, 1.0], speed: 0.08, radius: 10, damage: 1, desc: 'Lightning bolt with instant shockwave.' },
+  { id: 'frost', name: 'Frost Nova', key: '4', icon: '❄️', unlockLvl: 4, color: [0.2, 0.9, 1.0, 1.0], speed: 0.04, radius: 32, damage: 2, desc: 'Expands into a massive freezing aura.' },
+  { id: 'void', name: 'Void Rift', key: '5', icon: '🌌', unlockLvl: 5, color: [0.7, 0.2, 1.0, 1.0], speed: 0.025, radius: 40, damage: 4, desc: 'Pulls dark gravitational force.' }
+];
+
+// Dungeon Environments
+const REALMS = [
+  { name: "Shattered Crypts", bg: [0.04, 0.04, 0.09, 1.0], accent: [0.6, 0.3, 0.9] },
+  { name: "Infernal Caverns", bg: [0.08, 0.03, 0.04, 1.0], accent: [1.0, 0.3, 0.1] },
+  { name: "Frostbite Spire", bg: [0.02, 0.06, 0.10, 1.0], accent: [0.2, 0.8, 1.0] },
+  { name: "Void Sanctum", bg: [0.06, 0.02, 0.08, 1.0], accent: [0.8, 0.2, 0.8] },
+  { name: "Astral Apex", bg: [0.03, 0.08, 0.12, 1.0], accent: [0.9, 0.8, 0.2] }
+];
+
+// User Cosmetics Config
+function getCosmetics(user) {
+  if (user === 'The_Corvid') {
+    return { hat: 'Purple Fedora & Orange Feather', type: 'fedora', hatColor: [0.45, 0.15, 0.65, 1], featherColor: [1.0, 0.5, 0.0, 1] };
+  }
+  if (user === 'archivis7') {
+    return { hat: 'Archivist Crown', type: 'crown', isArchivis: true, primary: [0.75, 0.2, 1.0, 1], secondary: [1.0, 0.84, 0.1, 1] };
+  }
+  if (user === 'AJTech') {
+    return { hat: 'Blue Bowler Hat', type: 'bowler', hatColor: [0.1, 0.4, 0.9, 1] };
+  }
+  if (user === 'someone') {
+    return { hat: 'Green Cap & White Feather', type: 'green_hat', hatColor: [0.15, 0.7, 0.3, 1], featherColor: [1.0, 1.0, 1.0, 1] };
+  }
+  return { hat: 'Acolyte Hood', type: 'hood' };
+}
+
+// Shader Programs
+const VS_SOURCE = `#version 300 es
+in vec2 a_pos;
+in vec2 a_uv;
+in vec4 a_color;
+in float a_shape; // 0=Quad, 1=Circle SDF, 2=Ring SDF, 3=Glow Spark
+
+out vec2 v_uv;
+out vec4 v_color;
+out float v_shape;
+
+uniform vec2 u_res;
+
+void main() {
+    vec2 zeroToOne = a_pos / u_res;
+    vec2 zeroToTwo = zeroToOne * 2.0;
+    vec2 clipSpace = zeroToTwo - 1.0;
+    gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
+    v_uv = a_uv;
+    v_color = a_color;
+    v_shape = a_shape;
+}`;
+
+const FS_SOURCE = `#version 300 es
+precision highp float;
+
+in vec2 v_uv;
+in vec4 v_color;
+in float v_shape;
+
+out vec4 fragColor;
+
+void main() {
+    if (v_shape < 0.5) {
+        // Crisp Flat Quad
+        fragColor = v_color;
+    } else if (v_shape < 1.5) {
+        // Soft Radial Particle / Orb SDF
+        vec2 d = v_uv - vec2(0.5);
+        float dist = length(d);
+        float alpha = smoothstep(0.5, 0.05, dist);
+        float core = smoothstep(0.2, 0.0, dist);
+        vec3 col = mix(v_color.rgb, vec3(1.0), core * 0.7);
+        fragColor = vec4(col, alpha * v_color.a);
+    } else if (v_shape < 2.5) {
+        // Shockwave Ring SDF
+        vec2 d = v_uv - vec2(0.5);
+        float dist = length(d);
+        float ring = smoothstep(0.12, 0.0, abs(dist - 0.38));
+        fragColor = vec4(v_color.rgb, ring * v_color.a);
+    } else {
+        // Star Spark Energy
+        vec2 d = abs(v_uv - vec2(0.5));
+        float spark = 0.025 / (d.x + d.y + 0.001);
+        fragColor = vec4(v_color.rgb * spark, min(1.0, spark) * v_color.a);
+    }
+}`;
+
+function createShader(gl, type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  return s;
+}
+
+const program = gl.createProgram();
+gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, VS_SOURCE));
+gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, FS_SOURCE));
+gl.linkProgram(program);
+
+const posLoc = gl.getAttribLocation(program, 'a_pos');
+const uvLoc = gl.getAttribLocation(program, 'a_uv');
+const colLoc = gl.getAttribLocation(program, 'a_color');
+const shapeLoc = gl.getAttribLocation(program, 'a_shape');
+const resLoc = gl.getUniformLocation(program, 'u_res');
+
+const vbo = gl.createBuffer();
+const vao = gl.createVertexArray();
+
+gl.bindVertexArray(vao);
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+
+const STRIDE = 36; // 2 pos + 2 uv + 4 col + 1 shape = 9 floats * 4 bytes
+gl.enableVertexAttribArray(posLoc);
+gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, STRIDE, 0);
+gl.enableVertexAttribArray(uvLoc);
+gl.vertexAttribPointer(uvLoc, 2, gl.FLOAT, false, STRIDE, 8);
+gl.enableVertexAttribArray(colLoc);
+gl.vertexAttribPointer(colLoc, 4, gl.FLOAT, false, STRIDE, 16);
+gl.enableVertexAttribArray(shapeLoc);
+gl.vertexAttribPointer(shapeLoc, 1, gl.FLOAT, false, STRIDE, 32);
+
+// Batch Quad Rendering Helpers
+function pushQuad(verts, x, y, w, h, r, g, b, a = 1.0, shape = 0) {
+  verts.push(
+    x, y, 0, 0, r, g, b, a, shape,
+    x + w, y, 1, 0, r, g, b, a, shape,
+    x, y + h, 0, 1, r, g, b, a, shape,
+    x + w, y, 1, 0, r, g, b, a, shape,
+    x + w, y + h, 1, 1, r, g, b, a, shape,
+    x, y + h, 0, 1, r, g, b, a, shape
+  );
+}
+
+function pushCenteredQuad(verts, cx, cy, size, r, g, b, a = 1.0, shape = 1) {
+  const hs = size / 2;
+  pushQuad(verts, cx - hs, cy - hs, size, size, r, g, b, a, shape);
+}
+
+// UI & Spell Management
+function setProfile(name) {
+  document.getElementById('username-input').value = name;
+  updateProfileUI();
+}
+
+function updateProfileUI() {
+  activeUser = document.getElementById('username-input').value.trim() || 'Caster';
+  const cos = getCosmetics(activeUser);
+  const info = cos.isArchivis 
+    ? `Arcane Perk: <strong>Purple & Gold Magic Palette</strong>`
+    : `Cosmetic: <strong>${cos.hat}</strong>`;
+  document.getElementById('profile-info').innerHTML = info;
+  document.getElementById('hud-cosmetic').innerHTML = info;
+  document.getElementById('hud-max').innerText = maxLevel;
+}
+
+document.getElementById('username-input').addEventListener('input', updateProfileUI);
+
+function buildSpellBar() {
+  const bar = document.getElementById('spell-bar');
+  bar.innerHTML = '';
+  
+  SPELL_BOOK.forEach((spell, idx) => {
+    const isUnlocked = currentLevel >= spell.unlockLvl;
+    const slot = document.createElement('div');
+    slot.className = `spell-slot ${idx === activeSpellIndex ? 'active' : ''} ${!isUnlocked ? 'locked' : ''}`;
+    slot.onclick = () => {
+      if (isUnlocked) {
+        activeSpellIndex = idx;
+        buildSpellBar();
+      }
+    };
+    slot.innerHTML = `
+      <span class="key">${spell.key}</span>
+      <span class="icon">${spell.icon}</span>
+      <span class="name">${spell.name}</span>
+    `;
+    bar.appendChild(slot);
+  });
+}
+
+window.addEventListener('keydown', (e) => {
+  const keyIdx = parseInt(e.key) - 1;
+  if (!isNaN(keyIdx) && keyIdx >= 0 && keyIdx < SPELL_BOOK.length) {
+    if (currentLevel >= SPELL_BOOK[keyIdx].unlockLvl) {
+      activeSpellIndex = keyIdx;
+      buildSpellBar();
+    }
+  }
+});
+
+function startGame() {
+  activeUser = document.getElementById('username-input').value.trim() || 'Caster';
+  document.getElementById('start-menu').classList.add('hidden');
+  currentLevel = 1;
+  activeSpellIndex = 0;
+  isPlaying = true;
+  initLevel(currentLevel);
+}
+
+function showMenu() {
+  isPlaying = false;
+  document.getElementById('start-menu').classList.remove('hidden');
+  document.getElementById('clear-menu').classList.add('hidden');
+}
+
+function showUnlockToast(text) {
+  const toast = document.createElement('div');
+  toast.className = 'unlock-toast';
+  toast.innerText = text;
+  document.getElementById('game-wrapper').appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+function initLevel(lvl) {
+  const realm = REALMS[(lvl - 1) % REALMS.length];
+  document.getElementById('realm-name').innerText = realm.name;
+  document.getElementById('hud-lvl').innerText = lvl;
+  document.getElementById('hud-max').innerText = maxLevel;
+
+  buildSpellBar();
+
+  // Notify spell unlocks
+  const newlyUnlocked = SPELL_BOOK.find(s => s.unlockLvl === lvl);
+  if (newlyUnlocked && lvl > 1) {
+    showUnlockToast(`✨ Discovered New Spell: ${newlyUnlocked.name}!`);
+  }
+
+  targets = [];
+  spells = [];
+  particles = [];
+
+  const enemyCount = 4 + lvl * 2;
+  for (let i = 0; i < enemyCount; i++) {
+    targets.push({
+      x: 120 + Math.random() * 720,
+      y: 90 + Math.random() * 260,
+      r: 20 + Math.random() * 6,
+      hp: Math.min(2 + Math.floor(lvl * 1.5), 12),
+      maxHp: Math.min(2 + Math.floor(lvl * 1.5), 12),
+      phase: Math.random() * Math.PI * 2,
+      vx: (Math.random() - 0.5) * (1.2 + lvl * 0.25)
+    });
+  }
+
+  // Background Ambient Dust
+  lightBeams = [];
+  for (let i = 0; i < 30; i++) {
+    lightBeams.push({
+      x: Math.random() * 960,
+      y: Math.random() * 640,
+      s: 2 + Math.random() * 4,
+      vy: -0.3 - Math.random() * 0.4,
+      a: 0.15 + Math.random() * 0.4
+    });
+  }
+}
+
+function nextLevel() {
+  document.getElementById('clear-menu').classList.add('hidden');
+  currentLevel++;
+  if (currentLevel - 1 > maxLevel) {
+    maxLevel = currentLevel - 1;
+    localStorage.setItem('spell_max_level', maxLevel);
+  }
+  isPlaying = true;
+  initLevel(currentLevel);
+}
+
+canvas.addEventListener('click', (e) => {
+  if (!isPlaying) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+  const cos = getCosmetics(activeUser);
+  const spellDef = SPELL_BOOK[activeSpellIndex];
+
+  // User 'archivis7' override: Force Purple & Gold palette
+  let color = spellDef.color;
+  if (cos.isArchivis) {
+    color = (spells.length % 2 === 0) ? cos.primary : cos.secondary;
+  }
+
+  spells.push({
+    type: spellDef.id,
+    x: 480, y: 550,
+    startX: 480, startY: 550,
+    tx: mx, ty: my,
+    color: color,
+    radius: spellDef.radius,
+    damage: spellDef.damage,
+    speed: spellDef.speed,
+    progress: 0
+  });
+});
+
+// Render Entities
+function drawPlayer(verts, time) {
+  const px = 480, py = 550;
+  const floatY = Math.sin(time * 3) * 4;
+  const cos = getCosmetics(activeUser);
+
+  // Arcane Aura Floor Ring
+  pushCenteredQuad(verts, px, py + 25, 70, 0.6, 0.3, 1.0, 0.3 + Math.sin(time * 4) * 0.1, 2);
+
+  // Robe Body
+  pushQuad(verts, px - 20, py - 10 + floatY, 40, 48, 0.1, 0.1, 0.22, 1.0, 0);
+  pushQuad(verts, px - 12, py - 10 + floatY, 24, 48, 0.3, 0.18, 0.5, 1.0, 0);
+
+  // Wizard Head / Hood Base
+  pushCenteredQuad(verts, px, py - 24 + floatY, 28, 0.85, 0.72, 0.6, 1.0, 1);
+
+  // Dynamic Cosmetics Engine
+  if (cos.type === 'fedora') {
+    // Purple Fedora & Feather
+    pushQuad(verts, px - 26, py - 38 + floatY, 52, 6, cos.hatColor[0], cos.hatColor[1], cos.hatColor[2], 1.0, 0);
+    pushQuad(verts, px - 16, py - 54 + floatY, 32, 18, cos.hatColor[0] * 0.8, cos.hatColor[1] * 0.8, cos.hatColor[2] * 0.8, 1.0, 0);
+    pushQuad(verts, px + 10, py - 60 + floatY, 4, 18, cos.featherColor[0], cos.featherColor[1], cos.featherColor[2], 1.0, 0);
+  } else if (cos.type === 'bowler') {
+    // Blue Bowler Hat
+    pushCenteredQuad(verts, px, py - 40 + floatY, 32, cos.hatColor[0], cos.hatColor[1], cos.hatColor[2], 1.0, 1);
+    pushQuad(verts, px - 22, py - 34 + floatY, 44, 6, cos.hatColor[0] * 0.7, cos.hatColor[1] * 0.7, cos.hatColor[2] * 0.7, 1.0, 0);
+  } else if (cos.type === 'green_hat') {
+    // Green Hat & White Feather
+    pushQuad(verts, px - 20, py - 38 + floatY, 40, 8, cos.hatColor[0], cos.hatColor[1], cos.hatColor[2], 1.0, 0);
+    pushQuad(verts, px - 12, py - 50 + floatY, 24, 14, cos.hatColor[0], cos.hatColor[1], cos.hatColor[2], 1.0, 0);
+    pushQuad(verts, px - 14, py - 56 + floatY, 4, 16, cos.featherColor[0], cos.featherColor[1], cos.featherColor[2], 1.0, 0);
+  } else if (cos.type === 'crown') {
+    // Archivist Gold & Purple Crown
+    pushQuad(verts, px - 16, py - 42 + floatY, 32, 10, 1.0, 0.84, 0.1, 1.0, 0);
+    pushCenteredQuad(verts, px - 10, py - 45 + floatY, 6, 0.8, 0.2, 1.0, 1.0, 3);
+    pushCenteredQuad(verts, px, py - 47 + floatY, 8, 0.8, 0.2, 1.0, 1.0, 3);
+    pushCenteredQuad(verts, px + 10, py - 45 + floatY, 6, 0.8, 0.2, 1.0, 1.0, 3);
+  } else {
+    // Default Hood
+    pushCenteredQuad(verts, px, py - 28 + floatY, 34, 0.2, 0.15, 0.35, 1.0, 1);
+  }
+
+  // Caster Staff & Glowing Crystal Orb
+  pushQuad(verts, px + 26, py - 35 + floatY, 5, 70, 0.35, 0.22, 0.12, 1.0, 0);
+  pushCenteredQuad(verts, px + 28, py - 42 + floatY, 22, 0.4, 0.8, 1.0, 0.8 + Math.sin(time * 6) * 0.2, 1);
+}
+
+function drawEnemies(verts, time) {
+  for (let t of targets) {
+    const floatY = t.y + Math.sin(time * 3 + t.phase) * 8;
+    const hpRatio = t.hp / t.maxHp;
+
+    // Glowing Outer Shadow / Shield
+    pushCenteredQuad(verts, t.x, floatY, t.r * 2.8, 0.9, 0.2, 0.4, 0.2, 2);
+
+    // Dark Crystal Core
+    pushCenteredQuad(verts, t.x, floatY, t.r * 1.8, 0.15, 0.08, 0.2, 0.9, 1);
+    pushCenteredQuad(verts, t.x, floatY, t.r * 1.2, 0.9, 0.2, 0.4, 0.8 + Math.sin(time * 5 + t.phase) * 0.2, 3);
+
+    // Health Bar Container
+    pushQuad(verts, t.x - t.r, floatY - t.r - 14, t.r * 2, 5, 0.1, 0.1, 0.15, 0.8, 0);
+    pushQuad(verts, t.x - t.r, floatY - t.r - 14, t.r * 2 * hpRatio, 5, 0.2, 0.9, 0.4, 0.9, 0);
+  }
+}
+
+// Game Loop
+function loop() {
+  gameTime += 0.016;
+
+  if (isPlaying) {
+    // Target Movements
+    for (let t of targets) {
+      t.x += t.vx;
+      if (t.x < 70 || t.x > 890) t.vx *= -1;
+    }
+
+    // Process Active Spells
+    for (let i = spells.length - 1; i >= 0; i--) {
+      let s = spells[i];
+      s.progress += s.speed;
+
+      let cx = s.startX + (s.tx - s.startX) * s.progress;
+      let cy = s.startY + (s.ty - s.startY) * s.progress;
+
+      // Particle Trail
+      particles.push({
+        x: cx + (Math.random() - 0.5) * 10,
+        y: cy + (Math.random() - 0.5) * 10,
+        vx: (Math.random() - 0.5) * 1.2,
+        vy: (Math.random() - 0.5) * 1.2,
+        life: 0.8,
+        size: 8 + Math.random() * 8,
+        color: s.color,
+        shape: 1
+      });
+
+      if (s.progress >= 1.0) {
+        // Spell Impact Detonation
+        const burstCount = s.type === 'frost' ? 36 : (s.type === 'fireball' ? 28 : 18);
+        for (let p = 0; p < burstCount; p++) {
+          let ang = Math.random() * Math.PI * 2;
+          let spd = 1.5 + Math.random() * (s.radius * 0.25);
+          particles.push({
+            x: s.tx, y: s.ty,
+            vx: Math.cos(ang) * spd,
+            vy: Math.sin(ang) * spd,
+            life: 1.0,
+            size: 10 + Math.random() * 12,
+            color: s.color,
+            shape: s.type === 'frost' ? 2 : 1
+          });
+        }
+
+        // Damage Collision Logic
+        for (let t of targets) {
+          let dx = t.x - s.tx, dy = t.y - s.ty;
+          if (Math.sqrt(dx * dx + dy * dy) < t.r + s.radius) {
+            t.hp -= s.damage;
+          }
+        }
+        spells.splice(i, 1);
+      }
+    }
+
+    // Particle Lifecycle
+    for (let i = particles.length - 1; i >= 0; i--) {
+      let p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= 0.035;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    // Level Clear Check
+    targets = targets.filter(t => t.hp > 0);
+    if (targets.length === 0) {
+      isPlaying = false;
+      document.getElementById('clear-sub').innerText = `Realm ${currentLevel} Purified!`;
+      document.getElementById('clear-menu').classList.remove('hidden');
+    }
+  }
+
+  // Clear WebGL Context
+  const realm = REALMS[(currentLevel - 1) % REALMS.length];
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(realm.bg[0], realm.bg[1], realm.bg[2], 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  gl.useProgram(program);
+  gl.uniform2f(resLoc, canvas.width, canvas.height);
+
+  const verts = [];
+
+  // Background Ambient Dust
+  for (let p of lightBeams) {
+    p.y += p.vy;
+    if (p.y < 0) p.y = 640;
+    pushCenteredQuad(verts, p.x, p.y, p.s, realm.accent[0], realm.accent[1], realm.accent[2], p.a, 3);
+  }
+
+  // Draw Game World
+  drawPlayer(verts, gameTime);
+  drawEnemies(verts, gameTime);
+
+  // Draw Moving Spell Projectiles
+  for (let s of spells) {
+    let cx = s.startX + (s.tx - s.startX) * s.progress;
+    let cy = s.startY + (s.ty - s.startY) * s.progress;
+    let c = s.color;
+
+    pushCenteredQuad(verts, cx, cy, s.radius * 2.5, c[0], c[1], c[2], 0.4, 2); // Outer Shock Aura
+    pushCenteredQuad(verts, cx, cy, s.radius * 1.5, c[0], c[1], c[2], 0.9, 1); // Core
+    pushCenteredQuad(verts, cx, cy, s.radius * 0.8, 1.0, 1.0, 1.0, 0.95, 3); // Center Spark
+  }
+
+  // Draw Spell Burst Particles
+  for (let p of particles) {
+    let c = p.color;
+    pushCenteredQuad(verts, p.x, p.y, p.size * p.life, c[0], c[1], c[2], p.life, p.shape);
+  }
+
+  // Send Quad Buffer to GPU
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.DYNAMIC_DRAW);
+  gl.bindVertexArray(vao);
+  gl.drawArrays(gl.TRIANGLES, 0, verts.length / 9);
+
+  requestAnimationFrame(loop);
+}
+
+// Initialize Profile UI & Engine
+updateProfileUI();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

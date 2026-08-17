@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CC Arcade Hub - Space & Rogue</title>
+    <title>CC Arcade Hub - Space, Rogue & Spellweaver</title>
     <style>
         :root {
             --primary: #4CAF50;
@@ -11,6 +11,7 @@
             --accent: #00e5ff;
             --danger: #ff5252;
             --purple: #7c3aed;
+            --pink: #ec4899;
             --bg-glass: rgba(10, 15, 30, 0.88);
         }
 
@@ -174,8 +175,10 @@
         #game-select-modal {
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 12px;
             width: 380px;
+            max-height: 520px;
+            overflow-y: auto;
         }
 
         #game-select-modal h1 {
@@ -187,7 +190,7 @@
         }
 
         #game-select-modal p {
-            margin: 0 0 15px 0;
+            margin: 0 0 10px 0;
             color: #aaa;
             font-size: 14px;
         }
@@ -195,7 +198,7 @@
         .game-card-btn {
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 16px;
+            padding: 14px;
             border-radius: 8px;
             color: white;
             text-align: left;
@@ -215,6 +218,12 @@
             background: rgba(124, 58, 237, 0.2);
             border-color: var(--purple);
             box-shadow: 0 0 15px rgba(124, 58, 237, 0.4);
+        }
+
+        .game-card-btn.spellweaver:hover {
+            background: rgba(236, 72, 153, 0.2);
+            border-color: var(--pink);
+            box-shadow: 0 0 15px rgba(236, 72, 153, 0.4);
         }
 
         .game-title {
@@ -408,6 +417,11 @@
                 <div class="game-desc">Navigate dungeon corridors, vanquish enemies, and survive the depth.</div>
             </button>
 
+            <button class="game-card-btn spellweaver" id="launch-wizard-btn">
+                <div class="game-title" style="color: #f472b6;">CC Spellweaver <span>FILE: wizard.html</span></div>
+                <div class="game-desc">Master arcane spells, battle elemental forces, and conquer the realm.</div>
+            </button>
+
             <button class="btn-secondary" id="attribution-btn" style="width: 100%; margin-top: 5px;">Attributions</button>
         </div>
 
@@ -492,6 +506,7 @@
         const bossWarningEl = document.getElementById('boss-warning');
         const launchSpaceBtn = document.getElementById('launch-space-btn');
         const launchRogueBtn = document.getElementById('launch-rogue-btn');
+        const launchWizardBtn = document.getElementById('launch-wizard-btn');
 
         // --- State Variables ---
         let score = 0;
@@ -1069,6 +1084,10 @@
 
         launchRogueBtn.addEventListener('click', () => {
             window.location.href = 'rogue.html';
+        });
+
+        launchWizardBtn.addEventListener('click', () => {
+            window.location.href = 'wizard.html';
         });
 
         menuBtn.addEventListener('click', () => {
