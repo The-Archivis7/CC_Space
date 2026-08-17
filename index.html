@@ -259,7 +259,7 @@
             box-shadow: 0 0 20px rgba(76, 175, 80, 0.7);
         }
 
-        #upgrade-menu h2 {
+        #upgrade-menu h2, #attribution-modal h2 {
             margin-top: 0;
             color: var(--accent);
             border-bottom: 1px solid rgba(255, 255, 255, 0.15);
@@ -303,6 +303,43 @@
             border-radius: 4px;
             font-size: 12px;
             color: var(--accent);
+        }
+
+        /* Attribution Menu Styling */
+        .attribution-box {
+            font-size: 13px;
+            color: #d1d5db;
+            line-height: 1.6;
+            text-align: left;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 14px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 15px 0;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .attribution-item {
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+        }
+
+        .attribution-item:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .attribution-box a {
+            color: var(--accent);
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .attribution-box a:hover {
+            text-decoration: underline;
         }
 
         #boss-warning {
@@ -349,7 +386,7 @@
             </div>
         </div>
 
-        <!-- Bottom Right Boss Defeat Counter -->
+        <!-- Bottom Right Boss UI -->
         <div id="boss-tracker-ui">
             Bosses Defeated: <span id="bosses-beaten">0</span>
         </div>
@@ -370,6 +407,31 @@
                 <div class="game-title" style="color: #a78bfa;">CC Rogue <span>FILE: rogue.html</span></div>
                 <div class="game-desc">Navigate dungeon corridors, vanquish enemies, and survive the depth.</div>
             </button>
+
+            <button class="btn-secondary" id="attribution-btn" style="width: 100%; margin-top: 5px;">Attributions</button>
+        </div>
+
+        <!-- Attribution Submenu -->
+        <div id="attribution-modal" class="modal">
+            <h2>Attributions</h2>
+            <div class="attribution-box">
+                <div class="attribution-item">
+                    <strong>Music:</strong> Adventure by Alexander Nakarada (<a href="https://creatorchords.com" target="_blank" rel="noopener noreferrer">https://creatorchords.com</a>)<br>
+                    Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0)<br>
+                    <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">https://creativecommons.org/licenses/by/4.0/</a>
+                </div>
+                <div class="attribution-item">
+                    <strong>Music:</strong> Entertainment by Alexander Nakarada (<a href="https://creatorchords.com" target="_blank" rel="noopener noreferrer">https://creatorchords.com</a>)<br>
+                    Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0)<br>
+                    <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">https://creativecommons.org/licenses/by/4.0/</a>
+                </div>
+                <div class="attribution-item">
+                    <strong>Music:</strong> Celebration by Alexander Nakarada (<a href="https://creatorchords.com" target="_blank" rel="noopener noreferrer">https://creatorchords.com</a>)<br>
+                    Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0)<br>
+                    <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">https://creativecommons.org/licenses/by/4.0/</a>
+                </div>
+            </div>
+            <button id="close-attribution-btn" class="btn-primary" style="width: 100%;">Back to Menu</button>
         </div>
 
         <div id="game-over-modal" class="modal">
@@ -417,11 +479,14 @@
         const bossesBeatenEl = document.getElementById('bosses-beaten');
         const gameOverModal = document.getElementById('game-over-modal');
         const gameSelectModal = document.getElementById('game-select-modal');
+        const attributionModal = document.getElementById('attribution-modal');
         const finalScoreEl = document.getElementById('final-score');
         const restartBtn = document.getElementById('restart');
         const upgradeBtn = document.getElementById('upgrade-btn');
         const menuBtn = document.getElementById('menu-btn');
         const gameOverMenuBtn = document.getElementById('game-over-menu-btn');
+        const attributionBtn = document.getElementById('attribution-btn');
+        const closeAttributionBtn = document.getElementById('close-attribution-btn');
         const upgradeMenu = document.getElementById('upgrade-menu');
         const closeUpgradeBtn = document.getElementById('close-upgrade');
         const bossWarningEl = document.getElementById('boss-warning');
@@ -432,7 +497,7 @@
         let score = 0;
         let lives = 3;
         let maxLives = 3;
-        let bossesBeaten = 0; // Track total bosses defeated
+        let bossesBeaten = 0;
         let gameRunning = false;
         let gameInitialized = false;
         let lastShotTime = 0;
@@ -1010,11 +1075,22 @@
             gameRunning = false;
             upgradeMenu.style.display = 'none';
             gameOverModal.style.display = 'none';
+            attributionModal.style.display = 'none';
             gameSelectModal.style.display = 'flex';
         });
 
         gameOverMenuBtn.addEventListener('click', () => {
             gameOverModal.style.display = 'none';
+            gameSelectModal.style.display = 'flex';
+        });
+
+        attributionBtn.addEventListener('click', () => {
+            gameSelectModal.style.display = 'none';
+            attributionModal.style.display = 'block';
+        });
+
+        closeAttributionBtn.addEventListener('click', () => {
+            attributionModal.style.display = 'none';
             gameSelectModal.style.display = 'flex';
         });
 
