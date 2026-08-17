@@ -3,38 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Arcane Mastery - 2D WebGL Spellcaster</title>
+<title>CC Spellweaver - Advanced Character Model</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
   body {
-    background: #030308;
-    color: #e2e8f0;
+    background: #020205;
+    color: #f1f5f9;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
+    width: 100vw;
+    height: 100vh;
     overflow: hidden;
   }
 
-  #game-wrapper {
-    position: relative;
-    width: 960px;
-    height: 640px;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 0 50px rgba(120, 50, 255, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1);
-    background: #05050d;
-  }
+  #webgl-container { width: 100%; height: 100%; display: block; }
 
-  canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
-
-  /* UI Overlays */
   .overlay {
     position: absolute;
     inset: 0;
-    background: rgba(6, 6, 14, 0.88);
-    backdrop-filter: blur(12px);
+    background: rgba(4, 4, 10, 0.90);
+    backdrop-filter: blur(16px);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -45,736 +32,2028 @@
 
   .hidden { display: none !important; }
 
-  h1 {
-    font-size: 40px;
-    font-weight: 800;
-    letter-spacing: 2px;
-    background: linear-gradient(135deg, #c084fc, #60a5fa, #f472b6);
+  h1.title {
+    font-size: 44px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, #c084fc, #6366f1, #ec4899);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     margin-bottom: 6px;
+    filter: drop-shadow(0 0 12px rgba(192, 132, 252, 0.5));
   }
 
-  p.subtitle { font-size: 14px; color: #94a3b8; margin-bottom: 24px; }
+  p.subtitle { font-size: 13px; color: #94a3b8; margin-bottom: 20px; letter-spacing: 1px; }
 
-  .card {
-    background: rgba(18, 18, 32, 0.85);
+  .menu-card {
+    background: rgba(15, 15, 28, 0.95);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 12px;
-    padding: 24px;
-    width: 380px;
+    border-radius: 16px;
+    padding: 24px 28px;
+    width: 420px;
     display: flex;
     flex-direction: column;
     gap: 14px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.8);
   }
 
-  label { font-size: 11px; font-weight: 700; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1px; }
+  label { font-size: 11px; font-weight: 700; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1.5px; }
 
   input[type="text"] {
     width: 100%;
-    background: #0d0d1a;
-    border: 1px solid #3f3f5a;
+    background: #090914;
+    border: 1px solid #3b3b54;
     color: #f4f4f5;
     padding: 10px 14px;
-    border-radius: 6px;
+    border-radius: 8px;
     font-size: 14px;
     outline: none;
-    transition: border-color 0.2s;
   }
   input[type="text"]:focus { border-color: #a855f7; }
 
   .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
   .btn-preset {
-    background: #18182b;
-    border: 1px solid #2e2e4a;
+    background: #161628;
+    border: 1px solid #2e2e48;
     color: #cbd5e1;
     padding: 8px;
     border-radius: 6px;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
   }
-  .btn-preset:hover { background: #282846; border-color: #a855f7; color: #fff; }
+  .btn-preset:hover { background: #262642; border-color: #a855f7; color: #fff; }
 
   .info-badge {
-    background: rgba(168, 85, 247, 0.12);
+    background: rgba(168, 85, 247, 0.15);
     border: 1px solid rgba(168, 85, 247, 0.3);
     color: #e9d5ff;
-    padding: 10px;
-    border-radius: 6px;
+    padding: 10px 14px;
+    border-radius: 8px;
     font-size: 12px;
     text-align: center;
-    line-height: 1.4;
   }
 
-  .btn-action {
+  .btn-primary {
     background: linear-gradient(135deg, #8b5cf6, #3b82f6);
     color: #fff;
     border: none;
     padding: 12px;
-    border-radius: 6px;
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 1px;
     cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
   }
-  .btn-action:hover { transform: translateY(-1px); box-shadow: 0 6px 22px rgba(139, 92, 246, 0.6); }
+  .btn-primary:hover { transform: translateY(-1px); }
 
-  /* In-Game HUD & Spellbook Bar */
   #hud {
     position: absolute;
     top: 0; left: 0; right: 0;
-    padding: 14px 20px;
+    padding: 16px 24px;
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     pointer-events: none;
     z-index: 10;
   }
 
   .hud-panel {
-    background: rgba(10, 10, 22, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(8px);
-    padding: 8px 16px;
-    border-radius: 8px;
-    font-size: 13px;
+    background: rgba(8, 8, 18, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(10px);
+    padding: 10px 16px;
+    border-radius: 10px;
     pointer-events: auto;
+  }
+
+  .bar-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+
+  .hp-bg {
+    width: 180px;
+    height: 10px;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    border-radius: 6px;
+    overflow: hidden;
+    padding: 1px;
+  }
+
+  .player-hp-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #10b981, #34d399);
+    border-radius: 4px;
+    transition: width 0.15s ease;
+  }
+
+  #boss-bar-container {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 480px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .boss-name { font-size: 13px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: #f43f5e; }
+
+  .boss-hp-bg {
+    width: 100%;
+    height: 14px;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(244, 63, 94, 0.5);
+    border-radius: 8px;
+    overflow: hidden;
+    padding: 2px;
+  }
+
+  .boss-hp-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #f43f5e, #fb7185);
+    border-radius: 4px;
+    transition: width 0.1s linear;
+  }
+
+  #minion-status {
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(8, 8, 18, 0.85);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #38bdf8;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
   }
 
   #spell-bar {
     position: absolute;
-    bottom: 16px;
+    bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     gap: 10px;
-    background: rgba(10, 10, 22, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    backdrop-filter: blur(10px);
-    padding: 8px 12px;
-    border-radius: 12px;
+    background: rgba(8, 8, 18, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(12px);
+    padding: 8px 14px;
+    border-radius: 14px;
     z-index: 10;
   }
 
   .spell-slot {
-    width: 52px;
-    height: 52px;
+    width: 58px;
+    height: 58px;
     border-radius: 8px;
-    border: 2px solid #2e2e4a;
-    background: #0f0f1f;
+    border: 2px solid #2d2d48;
+    background: #0d0d1a;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
     position: relative;
+    overflow: hidden;
   }
-  .spell-slot.active { border-color: #a855f7; box-shadow: 0 0 12px rgba(168, 85, 247, 0.5); background: #1a102f; }
-  .spell-slot.locked { opacity: 0.35; cursor: not-allowed; filter: grayscale(1); }
-  .spell-slot .icon { font-size: 20px; }
-  .spell-slot .key { position: absolute; top: 2px; left: 4px; font-size: 9px; font-weight: 700; color: #94a3b8; }
-  .spell-slot .name { font-size: 9px; color: #cbd5e1; margin-top: 2px; }
+  .spell-slot.active { border-color: #c084fc; background: #1c1032; }
+  .spell-slot.locked { opacity: 0.3; cursor: not-allowed; filter: grayscale(1); }
+  .spell-slot .icon { font-size: 22px; z-index: 2; }
+  .spell-slot .key { position: absolute; top: 2px; left: 4px; font-size: 9px; font-weight: 800; color: #a1a1aa; z-index: 2; }
+  .spell-slot .name { font-size: 7px; font-weight: 700; color: #e2e8f0; margin-top: 1px; z-index: 2; text-align: center; }
 
-  .unlock-toast {
+  .cd-overlay {
     position: absolute;
-    top: 80px;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(15, 23, 42, 0.88);
+    height: 0%;
+    z-index: 1;
+  }
+
+  #controls-tip {
+    position: absolute;
+    bottom: 96px;
     left: 50%;
     transform: translateX(-50%);
-    background: linear-gradient(135deg, rgba(168, 85, 247, 0.9), rgba(59, 130, 246, 0.9));
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 10px 20px;
-    border-radius: 30px;
-    color: #fff;
-    font-weight: 700;
-    font-size: 14px;
-    box-shadow: 0 0 20px rgba(168, 85, 247, 0.6);
-    z-index: 20;
+    font-size: 11px;
+    color: #94a3b8;
+    background: rgba(8, 8, 18, 0.75);
+    padding: 4px 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.08);
     pointer-events: none;
-    animation: popup 3s forwards;
-  }
-
-  @keyframes popup {
-    0% { opacity: 0; transform: translate(-50%, -10px) scale(0.9); }
-    15% { opacity: 1; transform: translate(-50%, 0) scale(1); }
-    85% { opacity: 1; transform: translate(-50%, 0) scale(1); }
-    100% { opacity: 0; transform: translate(-50%, -20px) scale(0.9); }
   }
 </style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
 </head>
 <body>
 
-<div id="game-wrapper">
-  <!-- START MENU -->
-  <div id="start-menu" class="overlay">
-    <h1>Arcane Mastery</h1>
-    <p class="subtitle">Discover Ancient Spells &amp; Conquer the Realm</p>
-    
-    <div class="card">
-      <label for="username-input">Caster Identity</label>
-      <input type="text" id="username-input" value="archivis7" maxlength="16" spellcheck="false">
-      
-      <label>Quick Load Profile</label>
-      <div class="presets">
-        <button class="btn-preset" onclick="setProfile('The_Corvid')">The_Corvid</button>
-        <button class="btn-preset" onclick="setProfile('archivis7')">archivis7</button>
-        <button class="btn-preset" onclick="setProfile('AJTech')">AJTech</button>
-        <button class="btn-preset" onclick="setProfile('someone')">someone</button>
-      </div>
+<div id="webgl-container"></div>
 
-      <div id="profile-info" class="info-badge">Evaluating Arcane Signature...</div>
-
-      <button class="btn-action" onclick="startGame()">BEGIN RUN</button>
-    </div>
+<div id="boss-bar-container" class="hidden">
+  <div class="boss-name" id="boss-title">TITANIUM OVERLORD (METALLIC)</div>
+  <div class="boss-hp-bg">
+    <div class="boss-hp-fill" id="boss-hp-fill"></div>
   </div>
-
-  <!-- LEVEL CLEAR MENU -->
-  <div id="clear-menu" class="overlay hidden">
-    <h1 id="clear-title">Realm Cleared!</h1>
-    <p id="clear-sub" class="subtitle">Progress Saved to Grimoire</p>
-    <button class="btn-action" style="width:220px;" onclick="nextLevel()">NEXT REALM</button>
-  </div>
-
-  <!-- HUD & SPELL SLOTS -->
-  <div id="hud">
-    <div class="hud-panel">
-      <div style="font-weight:700; color:#c084fc;" id="realm-name">Realm 1</div>
-      <div style="color:#94a3b8; font-size:12px;">Level <span id="hud-lvl" style="color:#fff;">1</span> | Max Cleared: <span id="hud-max" style="color:#fff;">0</span></div>
-    </div>
-    <div class="hud-panel" id="hud-cosmetic" style="color:#e2e8f0; font-size:12px;"></div>
-    <button class="hud-panel" style="cursor:pointer;" onclick="showMenu()">Menu</button>
-  </div>
-
-  <!-- SPELLBAR -->
-  <div id="spell-bar"></div>
-
-  <canvas id="glCanvas" width="960" height="640"></canvas>
 </div>
 
-<script>
-const canvas = document.getElementById('glCanvas');
-const gl = canvas.getContext('webgl2', { alpha: false, antialias: true });
+<div id="minion-status" class="hidden">Minions Remaining: <span id="minion-count">0</span></div>
 
-if (!gl) alert('WebGL 2.0 required.');
+<div id="start-menu" class="overlay">
+  <h1 class="title">CC Spellweaver</h1>
+  <p class="subtitle">Procedural High-Detail Arcane Caster • Gyroscopic Focus</p>
+  
+  <div class="menu-card">
+    <label for="username-input">Caster Profile</label>
+    <input type="text" id="username-input" value="archivis7" maxlength="16" spellcheck="false">
+    
+    <label>Cosmetic Presets</label>
+    <div class="presets">
+      <button class="btn-preset" onclick="setProfile('The_Corvid')">The_Corvid</button>
+      <button class="btn-preset" onclick="setProfile('archivis7')">archivis7</button>
+      <button class="btn-preset" onclick="setProfile('AJTech')">AJTech</button>
+      <button class="btn-preset" onclick="setProfile('someone')">someone</button>
+    </div>
 
-// Enable Additive Blending for Magic Glows
-gl.enable(gl.BLEND);
-gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    <div id="profile-info" class="info-badge">Analyzing Arcane Matrix...</div>
 
-// Game State Variables
+    <button class="btn-primary" onclick="startGame()">ENTER SANCTUARY</button>
+  </div>
+</div>
+
+<div id="clear-menu" class="overlay hidden">
+  <h1 class="title" id="clear-title">Stage Cleared!</h1>
+  <p id="clear-sub" class="subtitle">Realms Liberated • Advance to Next Challenge</p>
+  <button class="btn-primary" style="width: 220px;" onclick="nextLevel()">ADVANCE REALM</button>
+</div>
+
+<div id="game-over-menu" class="overlay hidden">
+  <h1 class="title" style="background: linear-gradient(135deg, #f43f5e, #fb7185); -webkit-background-clip: text;">Defeated</h1>
+  <p class="subtitle">Your Arcane Energy Was Exhausted</p>
+  <button class="btn-primary" style="width: 220px;" onclick="retryLevel()">RETRY ENCOUNTER</button>
+</div>
+
+<div id="hud">
+  <div class="hud-panel" style="max-width: 240px;">
+    <div style="font-weight: 800; color: #c084fc; font-size: 14px;" id="realm-title">Realm Stage 1</div>
+    <div style="color: #94a3b8; font-size: 11px; margin-top: 2px;">
+      Level <span id="hud-lvl" style="color: #fff; font-weight:700;">1</span> | Max Cleared: <span id="hud-max" style="color: #fff; font-weight:700;">0</span>
+    </div>
+    <div style="margin-top: 8px;">
+      <div class="bar-label" style="color: #34d399;">Player Barrier HP</div>
+      <div class="hp-bg"><div class="player-hp-fill" id="player-hp-fill"></div></div>
+    </div>
+    <div id="hud-cosmetic" style="color: #e2e8f0; font-size: 10px; margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.12); line-height: 1.3;"></div>
+  </div>
+
+  <button class="hud-panel" style="cursor: pointer; color: #fff; font-weight: 700;" onclick="showMenu()">Main Menu</button>
+</div>
+
+<div id="controls-tip">WASD / Arrows: <strong>Move</strong> | Space: <strong>Dash</strong> | Left Click: <strong>Cast</strong></div>
+<div id="spell-bar"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+let scene, camera, renderer, composer, bloomPass;
 let activeUser = 'archivis7';
 let currentLevel = 1;
 let maxLevel = parseInt(localStorage.getItem('spell_max_level') || '0', 10);
 let isPlaying = false;
-let gameTime = 0;
+let clock = new THREE.Clock();
 let activeSpellIndex = 0;
 
-let targets = [];
-let spells = [];
+let playerGroup, playerBody, hatGroup, staffOrbMesh, orbLight;
+let staffInnerRing, staffOuterRing, staffCrystal;
+let floatingManaMotes = [];
+let runicAuraMesh;
+
+let playerVelocity = new THREE.Vector3();
+let keyState = {};
+let dashCooldown = 0;
+let playerHp = 100;
+let maxPlayerHp = 100;
+let invulnerableTimer = 0;
+
+let activeBoss = null;
+let normalEnemies = [];
+let projectiles = [];
+let lingeringZones = [];
 let particles = [];
-let lightBeams = [];
+let obelisks = [];
+let ambientLight, mainLight, rimLight;
 
-// Spell Book Definitions (Discoverable Spells)
-const SPELL_BOOK = [
-  { id: 'arcane', name: 'Arcane Orb', key: '1', icon: '🔮', unlockLvl: 1, color: [0.3, 0.8, 1.0, 1.0], speed: 0.05, radius: 12, damage: 1, desc: 'Fast precision arcane strike.' },
-  { id: 'fireball', name: 'Inferno', key: '2', icon: '🔥', unlockLvl: 2, color: [1.0, 0.4, 0.1, 1.0], speed: 0.035, radius: 22, damage: 2, desc: 'High damage explosive fireball.' },
-  { id: 'lightning', name: 'Chain Volt', key: '3', icon: '⚡', unlockLvl: 3, color: [0.9, 0.9, 0.2, 1.0], speed: 0.08, radius: 10, damage: 1, desc: 'Lightning bolt with instant shockwave.' },
-  { id: 'frost', name: 'Frost Nova', key: '4', icon: '❄️', unlockLvl: 4, color: [0.2, 0.9, 1.0, 1.0], speed: 0.04, radius: 32, damage: 2, desc: 'Expands into a massive freezing aura.' },
-  { id: 'void', name: 'Void Rift', key: '5', icon: '🌌', unlockLvl: 5, color: [0.7, 0.2, 1.0, 1.0], speed: 0.025, radius: 40, damage: 4, desc: 'Pulls dark gravitational force.' }
+const BASE_SPELLS = [
+  { id: 'arcane', name: 'Seeker Orbs', key: '1', icon: '🔮', unlockLvl: 1, color: 0x38bdf8, emissive: 0x0284c7, radius: 0.4, speed: 28, damage: 6, cd: 0.5, cdTimer: 0, type: 'homing' },
+  { id: 'fireball', name: 'Inferno Nova', key: '2', icon: '🔥', unlockLvl: 2, color: 0xf97316, emissive: 0xe11d48, radius: 0.8, speed: 22, damage: 20, cd: 2.2, cdTimer: 0, type: 'fireball' },
+  { id: 'lightning', name: 'Chain Volt', key: '3', icon: '⚡', unlockLvl: 3, color: 0xfacc15, emissive: 0xca8a04, radius: 0.1, speed: 120, damage: 12, cd: 1.5, cdTimer: 0, type: 'hitscan_beam' },
+  { id: 'frost', name: 'Frost Wave', key: '4', icon: '❄️', unlockLvl: 4, color: 0x38edf8, emissive: 0x0284c7, radius: 0.5, speed: 18, damage: 11, cd: 3.0, cdTimer: 0, type: 'cone_shockwave' },
+  { id: 'void', name: 'Void Singular', key: '5', icon: '🌌', unlockLvl: 5, color: 0xa855f7, emissive: 0x6b21a8, radius: 1.2, speed: 12, damage: 22, cd: 4.5, cdTimer: 0, type: 'gravity_vortex' }
 ];
 
-// Dungeon Environments
+// Buffed Feather Storm Spell
+const CORVID_SPELL = { id: 'feather_storm', name: 'Feather Storm', key: '6', icon: '🪶', unlockLvl: 1, color: 0xa855f7, emissive: 0xf97316, radius: 24.0, speed: 0, damage: 160, cd: 2.5, cdTimer: 0, type: 'feather_cleave' };
+
+const NUKE_SPELL = { id: 'cc_nuke', name: 'CC Nuke', key: '6', icon: '☢️', unlockLvl: 1, color: 0x22c55e, emissive: 0x15803d, radius: 22.0, speed: 0, damage: 300, cd: 6.0, cdTimer: 0, type: 'cc_nuke' };
+
+// Special Spells for archivis7
+const TANVON_BEAM = { id: 'tanvon_beam', name: "Tanvon's Beam", key: '6', icon: '🌑', unlockLvl: 1, color: 0x3b0764, emissive: 0xc084fc, radius: 2.2, speed: 0, damage: 220, cd: 1.0, cdTimer: 0, type: 'dark_beam' };
+const ASTRAL_STORM = { id: 'astral_storm', name: 'Astral Storm', key: '7', icon: '☄️', unlockLvl: 1, color: 0x22c55e, emissive: 0xa855f7, radius: 20.0, speed: 0, damage: 320, cd: 2.0, cdTimer: 0, type: 'astral_storm' };
+
+let SPELL_BOOK = [...BASE_SPELLS];
+
 const REALMS = [
-  { name: "Shattered Crypts", bg: [0.04, 0.04, 0.09, 1.0], accent: [0.6, 0.3, 0.9] },
-  { name: "Infernal Caverns", bg: [0.08, 0.03, 0.04, 1.0], accent: [1.0, 0.3, 0.1] },
-  { name: "Frostbite Spire", bg: [0.02, 0.06, 0.10, 1.0], accent: [0.2, 0.8, 1.0] },
-  { name: "Void Sanctum", bg: [0.06, 0.02, 0.08, 1.0], accent: [0.8, 0.2, 0.8] },
-  { name: "Astral Apex", bg: [0.03, 0.08, 0.12, 1.0], accent: [0.9, 0.8, 0.2] }
+  { name: "Astral Sanctuary", bg: 0x020208, fog: 0x020208, floorColor: 0x0f172a, rim: 0x8b5cf6, bossName: "Metallic Aegis Core", bossType: "chrome" },
+  { name: "Void Citadel", bg: 0x05020c, fog: 0x05020c, floorColor: 0x180b28, rim: 0xd946ef, bossName: "Titanium Overlord", bossType: "titanium" }
 ];
 
-// User Cosmetics Config
 function getCosmetics(user) {
-  if (user === 'The_Corvid') {
-    return { hat: 'Purple Fedora & Orange Feather', type: 'fedora', hatColor: [0.45, 0.15, 0.65, 1], featherColor: [1.0, 0.5, 0.0, 1] };
-  }
-  if (user === 'archivis7') {
-    return { hat: 'Archivist Crown', type: 'crown', isArchivis: true, primary: [0.75, 0.2, 1.0, 1], secondary: [1.0, 0.84, 0.1, 1] };
-  }
-  if (user === 'AJTech') {
-    return { hat: 'Blue Bowler Hat', type: 'bowler', hatColor: [0.1, 0.4, 0.9, 1] };
-  }
-  if (user === 'someone') {
-    return { hat: 'Green Cap & White Feather', type: 'green_hat', hatColor: [0.15, 0.7, 0.3, 1], featherColor: [1.0, 1.0, 1.0, 1] };
-  }
-  return { hat: 'Acolyte Hood', type: 'hood' };
+  if (user === 'The_Corvid') return { hatName: 'Purple Fedora & Feather', type: 'fedora', hatColor: 0x7e22ce, featherColor: 0xf97316 };
+  if (user === 'archivis7') return { hatName: 'Archivist Crown', type: 'crown', isArchivis: true, primary: 0xa855f7, secondary: 0xeab308 };
+  if (user === 'AJTech') return { hatName: 'Blue Bowler Hat', type: 'bowler', hatColor: 0x2563eb };
+  if (user === 'someone') return { hatName: 'Green Hat & White Feather', type: 'green_hat', hatColor: 0x16a34a, featherColor: 0xf8fafc };
+  return { hatName: 'Standard Hood', type: 'hood' };
 }
 
-// Shader Programs
-const VS_SOURCE = `#version 300 es
-in vec2 a_pos;
-in vec2 a_uv;
-in vec4 a_color;
-in float a_shape; // 0=Quad, 1=Circle SDF, 2=Ring SDF, 3=Glow Spark
+function initGraphics() {
+  const container = document.getElementById('webgl-container');
 
-out vec2 v_uv;
-out vec4 v_color;
-out float v_shape;
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  container.appendChild(renderer.domElement);
 
-uniform vec2 u_res;
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x020208, 0.015);
 
-void main() {
-    vec2 zeroToOne = a_pos / u_res;
-    vec2 zeroToTwo = zeroToOne * 2.0;
-    vec2 clipSpace = zeroToTwo - 1.0;
-    gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
-    v_uv = a_uv;
-    v_color = a_color;
-    v_shape = a_shape;
-}`;
+  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 140);
+  camera.position.set(0, 26, 32);
+  camera.lookAt(0, -1, -2);
 
-const FS_SOURCE = `#version 300 es
-precision highp float;
+  ambientLight = new THREE.AmbientLight(0x2e1065, 0.9);
+  scene.add(ambientLight);
 
-in vec2 v_uv;
-in vec4 v_color;
-in float v_shape;
+  mainLight = new THREE.DirectionalLight(0xffffff, 2.2);
+  mainLight.position.set(18, 35, 18);
+  mainLight.castShadow = true;
+  mainLight.shadow.mapSize.width = 2048;
+  mainLight.shadow.mapSize.height = 2048;
+  scene.add(mainLight);
 
-out vec4 fragColor;
+  rimLight = new THREE.DirectionalLight(0xa855f7, 1.8);
+  rimLight.position.set(-18, 12, -18);
+  scene.add(rimLight);
 
-void main() {
-    if (v_shape < 0.5) {
-        // Crisp Flat Quad
-        fragColor = v_color;
-    } else if (v_shape < 1.5) {
-        // Soft Radial Particle / Orb SDF
-        vec2 d = v_uv - vec2(0.5);
-        float dist = length(d);
-        float alpha = smoothstep(0.5, 0.05, dist);
-        float core = smoothstep(0.2, 0.0, dist);
-        vec3 col = mix(v_color.rgb, vec3(1.0), core * 0.7);
-        fragColor = vec4(col, alpha * v_color.a);
-    } else if (v_shape < 2.5) {
-        // Shockwave Ring SDF
-        vec2 d = v_uv - vec2(0.5);
-        float dist = length(d);
-        float ring = smoothstep(0.12, 0.0, abs(dist - 0.38));
-        fragColor = vec4(v_color.rgb, ring * v_color.a);
-    } else {
-        // Star Spark Energy
-        vec2 d = abs(v_uv - vec2(0.5));
-        float spark = 0.025 / (d.x + d.y + 0.001);
-        fragColor = vec4(v_color.rgb * spark, min(1.0, spark) * v_color.a);
-    }
-}`;
+  const renderPass = new RenderPass(scene, camera);
 
-function createShader(gl, type, src) {
-  const s = gl.createShader(type);
-  gl.shaderSource(s, src);
-  gl.compileShader(s);
-  return s;
-}
-
-const program = gl.createProgram();
-gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, VS_SOURCE));
-gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, FS_SOURCE));
-gl.linkProgram(program);
-
-const posLoc = gl.getAttribLocation(program, 'a_pos');
-const uvLoc = gl.getAttribLocation(program, 'a_uv');
-const colLoc = gl.getAttribLocation(program, 'a_color');
-const shapeLoc = gl.getAttribLocation(program, 'a_shape');
-const resLoc = gl.getUniformLocation(program, 'u_res');
-
-const vbo = gl.createBuffer();
-const vao = gl.createVertexArray();
-
-gl.bindVertexArray(vao);
-gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-
-const STRIDE = 36; // 2 pos + 2 uv + 4 col + 1 shape = 9 floats * 4 bytes
-gl.enableVertexAttribArray(posLoc);
-gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, STRIDE, 0);
-gl.enableVertexAttribArray(uvLoc);
-gl.vertexAttribPointer(uvLoc, 2, gl.FLOAT, false, STRIDE, 8);
-gl.enableVertexAttribArray(colLoc);
-gl.vertexAttribPointer(colLoc, 4, gl.FLOAT, false, STRIDE, 16);
-gl.enableVertexAttribArray(shapeLoc);
-gl.vertexAttribPointer(shapeLoc, 1, gl.FLOAT, false, STRIDE, 32);
-
-// Batch Quad Rendering Helpers
-function pushQuad(verts, x, y, w, h, r, g, b, a = 1.0, shape = 0) {
-  verts.push(
-    x, y, 0, 0, r, g, b, a, shape,
-    x + w, y, 1, 0, r, g, b, a, shape,
-    x, y + h, 0, 1, r, g, b, a, shape,
-    x + w, y, 1, 0, r, g, b, a, shape,
-    x + w, y + h, 1, 1, r, g, b, a, shape,
-    x, y + h, 0, 1, r, g, b, a, shape
+  bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.85, 0.40, 0.50
   );
+
+  composer = new EffectComposer(renderer);
+  composer.addPass(renderPass);
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
+
+  buildSanctuaryArena();
+  createPlayer();
+
+  window.addEventListener('resize', onWindowResize);
+  window.addEventListener('keydown', (e) => { keyState[e.code] = true; handleHotkeys(e); });
+  window.addEventListener('keyup', (e) => { keyState[e.code] = false; });
+  renderer.domElement.addEventListener('pointerdown', onCastSpell);
 }
 
-function pushCenteredQuad(verts, cx, cy, size, r, g, b, a = 1.0, shape = 1) {
-  const hs = size / 2;
-  pushQuad(verts, cx - hs, cy - hs, size, size, r, g, b, a, shape);
+function buildSanctuaryArena() {
+  const floorGeo = new THREE.CylinderGeometry(18, 15, 2.5, 64);
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x0a0a14, roughness: 0.25, metalness: 0.85 });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.position.y = -1.25;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  const ringGeo = new THREE.RingGeometry(16.5, 17.5, 64);
+  const ringMat = new THREE.MeshStandardMaterial({ color: 0x8b5cf6, emissive: 0x8b5cf6, emissiveIntensity: 0.6, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.02;
+  scene.add(ring);
+
+  const obeliskGeo = new THREE.ConeGeometry(0.8, 6.0, 5);
+  const obeliskMat = new THREE.MeshStandardMaterial({ color: 0x1e1e2e, roughness: 0.4, metalness: 0.7 });
+  const crystalGeo = new THREE.OctahedronGeometry(0.7);
+
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    const x = Math.cos(angle) * 22;
+    const z = Math.sin(angle) * 22;
+
+    const obeliskGroup = new THREE.Group();
+    const mesh = new THREE.Mesh(obeliskGeo, obeliskMat);
+    mesh.rotation.x = Math.PI;
+    mesh.position.y = 2.0;
+    mesh.castShadow = true;
+    obeliskGroup.add(mesh);
+
+    const crystalMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x38bdf8, emissiveIntensity: 0.9 });
+    const crystal = new THREE.Mesh(crystalGeo, crystalMat);
+    crystal.position.y = 5.8;
+    obeliskGroup.add(crystal);
+
+    obeliskGroup.position.set(x, 0, z);
+    scene.add(obeliskGroup);
+    obelisks.push({ group: obeliskGroup, offset: i * 1.0 });
+  }
 }
 
-// UI & Spell Management
-function setProfile(name) {
+function createPlayer() {
+  playerGroup = new THREE.Group();
+  playerGroup.position.set(0, 0, 8);
+
+  playerBody = new THREE.Group();
+  playerGroup.add(playerBody);
+
+  const robeMat = new THREE.MeshStandardMaterial({
+    color: 0x6d28d9,
+    roughness: 0.35,
+    metalness: 0.25,
+    emissive: 0x3b0764,
+    emissiveIntensity: 0.4
+  });
+
+  const trimGoldMat = new THREE.MeshStandardMaterial({
+    color: 0xf59e0b,
+    metalness: 0.9,
+    roughness: 0.2,
+    emissive: 0x78350f,
+    emissiveIntensity: 0.5
+  });
+
+  const armorSteelMat = new THREE.MeshStandardMaterial({
+    color: 0x1e293b,
+    metalness: 0.85,
+    roughness: 0.3
+  });
+
+  const cyanEmissiveMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    emissive: 0x0284c7,
+    emissiveIntensity: 2.2
+  });
+
+  const lowerRobeGeo = new THREE.CylinderGeometry(0.45, 0.95, 1.5, 16);
+  const lowerRobe = new THREE.Mesh(lowerRobeGeo, robeMat);
+  lowerRobe.position.y = 0.75;
+  lowerRobe.castShadow = true;
+  playerBody.add(lowerRobe);
+
+  const trimRingGeo = new THREE.TorusGeometry(0.96, 0.04, 8, 32);
+  const trimRing = new THREE.Mesh(trimRingGeo, trimGoldMat);
+  trimRing.rotation.x = Math.PI / 2;
+  trimRing.position.y = 0.04;
+  playerBody.add(trimRing);
+
+  const chestGeo = new THREE.CylinderGeometry(0.55, 0.42, 1.0, 12);
+  const chest = new THREE.Mesh(chestGeo, robeMat);
+  chest.position.y = 1.9;
+  chest.castShadow = true;
+  playerBody.add(chest);
+
+  const crestPlateGeo = new THREE.BoxGeometry(0.3, 0.45, 0.1);
+  const crestPlate = new THREE.Mesh(crestPlateGeo, armorSteelMat);
+  crestPlate.position.set(0, 1.95, 0.3);
+  playerBody.add(crestPlate);
+
+  const runeCoreGeo = new THREE.OctahedronGeometry(0.12);
+  const runeCore = new THREE.Mesh(runeCoreGeo, cyanEmissiveMat);
+  runeCore.position.set(0, 1.95, 0.36);
+  playerBody.add(runeCore);
+
+  [-1, 1].forEach(side => {
+    const pauldronGroup = new THREE.Group();
+    
+    const baseP = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), armorSteelMat);
+    baseP.scale.set(1.2, 0.8, 1.2);
+    pauldronGroup.add(baseP);
+
+    const rimP = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.03, 8, 16), trimGoldMat);
+    rimP.rotation.x = Math.PI / 2;
+    pauldronGroup.add(rimP);
+
+    pauldronGroup.position.set(side * 0.65, 2.35, 0);
+    pauldronGroup.rotation.z = -side * 0.35;
+    playerBody.add(pauldronGroup);
+  });
+
+  const headGeo = new THREE.SphereGeometry(0.28, 16, 16);
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
+  const head = new THREE.Mesh(headGeo, headMat);
+  head.position.y = 2.52;
+  playerBody.add(head);
+
+  const visorGeo = new THREE.BoxGeometry(0.32, 0.08, 0.12);
+  const visor = new THREE.Mesh(visorGeo, cyanEmissiveMat);
+  visor.position.set(0, 2.54, 0.22);
+  playerBody.add(visor);
+
+  hatGroup = new THREE.Group();
+  hatGroup.position.y = 2.65;
+  playerBody.add(hatGroup);
+
+  const staffGroup = new THREE.Group();
+  staffGroup.position.set(0.75, 1.4, 0.1);
+
+  const shaftGeo = new THREE.CylinderGeometry(0.035, 0.045, 3.2, 12);
+  const shaftMat = new THREE.MeshStandardMaterial({ color: 0x271c19, roughness: 0.7 });
+  const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+  shaft.castShadow = true;
+  staffGroup.add(shaft);
+
+  [-0.8, 0.2, 1.1].forEach(yPos => {
+    const binding = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.1, 12), trimGoldMat);
+    binding.position.y = yPos;
+    staffGroup.add(binding);
+  });
+
+  const innerRingGeo = new THREE.TorusGeometry(0.32, 0.03, 12, 32);
+  staffInnerRing = new THREE.Mesh(innerRingGeo, trimGoldMat);
+  staffInnerRing.position.y = 1.7;
+  staffGroup.add(staffInnerRing);
+
+  const outerRingGeo = new THREE.TorusGeometry(0.48, 0.025, 12, 32);
+  staffOuterRing = new THREE.Mesh(outerRingGeo, cyanEmissiveMat);
+  staffOuterRing.position.y = 1.7;
+  staffGroup.add(staffOuterRing);
+
+  const crystalGeo = new THREE.OctahedronGeometry(0.2, 0);
+  staffCrystal = new THREE.Mesh(crystalGeo, cyanEmissiveMat);
+  staffCrystal.position.y = 1.7;
+  staffGroup.add(staffCrystal);
+
+  staffOrbMesh = staffCrystal;
+
+  orbLight = new THREE.PointLight(0x38bdf8, 2.5, 12);
+  orbLight.position.set(0, 1.7, 0);
+  staffGroup.add(orbLight);
+
+  playerBody.add(staffGroup);
+
+  floatingManaMotes = [];
+  const moteGeo = new THREE.DodecahedronGeometry(0.06);
+  for (let i = 0; i < 4; i++) {
+    const mote = new THREE.Mesh(moteGeo, cyanEmissiveMat);
+    staffGroup.add(mote);
+    floatingManaMotes.push({ mesh: mote, offset: i * (Math.PI / 2), speed: 2.5 + Math.random() });
+  }
+
+  const auraGeo = new THREE.RingGeometry(1.0, 1.35, 32);
+  const auraMat = new THREE.MeshBasicMaterial({
+    color: 0xa855f7,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.65
+  });
+  runicAuraMesh = new THREE.Mesh(auraGeo, auraMat);
+  runicAuraMesh.rotation.x = Math.PI / 2;
+  runicAuraMesh.position.y = 0.03;
+  playerGroup.add(runicAuraMesh);
+
+  scene.add(playerGroup);
+  updateCosmetics3D();
+}
+
+function updateCosmetics3D() {
+  while(hatGroup.children.length > 0) hatGroup.remove(hatGroup.children[0]);
+  const cos = getCosmetics(activeUser);
+
+  if (cos.type === 'fedora') {
+    const hatMat = new THREE.MeshStandardMaterial({ color: cos.hatColor, roughness: 0.4 });
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.04, 16), hatMat);
+    hatGroup.add(brim);
+
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, 0.45, 16), hatMat);
+    crown.position.y = 0.22;
+    hatGroup.add(crown);
+
+    const featherGeo = new THREE.ConeGeometry(0.06, 0.6, 4);
+    const featherMat = new THREE.MeshStandardMaterial({ color: cos.featherColor, emissive: cos.featherColor, emissiveIntensity: 0.5 });
+    const feather = new THREE.Mesh(featherGeo, featherMat);
+    feather.rotation.z = -0.5;
+    feather.position.set(0.35, 0.35, 0);
+    hatGroup.add(feather);
+
+  } else if (cos.type === 'crown') {
+    const crownMat = new THREE.MeshStandardMaterial({ color: cos.secondary, metalness: 0.9, roughness: 0.2, emissive: cos.secondary, emissiveIntensity: 0.8 });
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.35, 0.28, 8), crownMat);
+    crown.position.y = 0.14;
+    hatGroup.add(crown);
+
+  } else if (cos.type === 'bowler') {
+    const hatMat = new THREE.MeshStandardMaterial({ color: cos.hatColor, roughness: 0.5 });
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.65, 0.04, 16), hatMat);
+    hatGroup.add(brim);
+
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.38, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), hatMat);
+    dome.position.y = 0.02;
+    hatGroup.add(dome);
+
+  } else if (cos.type === 'green_hat') {
+    const hatMat = new THREE.MeshStandardMaterial({ color: cos.hatColor, roughness: 0.5 });
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.6, 16), hatMat);
+    cone.rotation.x = 0.2;
+    cone.position.y = 0.25;
+    hatGroup.add(cone);
+
+    const featherGeo = new THREE.ConeGeometry(0.05, 0.5, 4);
+    const featherMat = new THREE.MeshStandardMaterial({ color: cos.featherColor });
+    const feather = new THREE.Mesh(featherGeo, featherMat);
+    feather.rotation.z = -0.4;
+    feather.position.set(0.3, 0.3, 0);
+    hatGroup.add(feather);
+
+  } else if (cos.type === 'hood') {
+    const hoodMat = new THREE.MeshStandardMaterial({ color: 0x4338ca, roughness: 0.6 });
+    const hood = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 16), hoodMat);
+    hood.position.y = 0.05;
+    hatGroup.add(hood);
+  }
+}
+
+window.setProfile = function(name) {
   document.getElementById('username-input').value = name;
   updateProfileUI();
-}
+};
 
 function updateProfileUI() {
   activeUser = document.getElementById('username-input').value.trim() || 'Caster';
   const cos = getCosmetics(activeUser);
+
+  SPELL_BOOK = [...BASE_SPELLS];
+  if (activeUser === 'The_Corvid') {
+    SPELL_BOOK.push(CORVID_SPELL);
+  } else if (activeUser === 'AJTech' || activeUser === 'someone') {
+    SPELL_BOOK.push(NUKE_SPELL);
+  } else if (activeUser === 'archivis7') {
+    SPELL_BOOK.push(TANVON_BEAM, ASTRAL_STORM);
+  }
+
   const info = cos.isArchivis 
-    ? `Arcane Perk: <strong>Purple & Gold Magic Palette</strong>`
-    : `Cosmetic: <strong>${cos.hat}</strong>`;
+    ? `Arcane Perk: <strong>NO COOLDOWNS • Beam of Night & Astral Storm Unlocked</strong>`
+    : (activeUser === 'The_Corvid' ? `Special Spell: <strong>Buffed Feather Storm Unlocked</strong>` 
+    : ((activeUser === 'AJTech' || activeUser === 'someone') ? `Special Spell: <strong>CC Orbital Nuke Unlocked</strong>`
+    : `Cosmetic Equipped: <strong>${cos.hatName}</strong>`));
+  
   document.getElementById('profile-info').innerHTML = info;
   document.getElementById('hud-cosmetic').innerHTML = info;
   document.getElementById('hud-max').innerText = maxLevel;
+
+  if (hatGroup) updateCosmetics3D();
+  buildSpellBarUI();
 }
 
 document.getElementById('username-input').addEventListener('input', updateProfileUI);
 
-function buildSpellBar() {
+function buildSpellBarUI() {
   const bar = document.getElementById('spell-bar');
+  if (!bar) return;
   bar.innerHTML = '';
   
   SPELL_BOOK.forEach((spell, idx) => {
-    const isUnlocked = currentLevel >= spell.unlockLvl;
+    const isUnlocked = (activeUser === 'archivis7') || (currentLevel >= spell.unlockLvl) || (spell.id === 'feather_storm') || (spell.id === 'cc_nuke');
     const slot = document.createElement('div');
     slot.className = `spell-slot ${idx === activeSpellIndex ? 'active' : ''} ${!isUnlocked ? 'locked' : ''}`;
+    slot.id = `spell-slot-${idx}`;
     slot.onclick = () => {
       if (isUnlocked) {
         activeSpellIndex = idx;
-        buildSpellBar();
+        buildSpellBarUI();
       }
     };
     slot.innerHTML = `
       <span class="key">${spell.key}</span>
       <span class="icon">${spell.icon}</span>
       <span class="name">${spell.name}</span>
+      <div class="cd-overlay" id="cd-overlay-${idx}"></div>
     `;
     bar.appendChild(slot);
   });
 }
 
-window.addEventListener('keydown', (e) => {
+function handleHotkeys(e) {
   const keyIdx = parseInt(e.key) - 1;
   if (!isNaN(keyIdx) && keyIdx >= 0 && keyIdx < SPELL_BOOK.length) {
-    if (currentLevel >= SPELL_BOOK[keyIdx].unlockLvl) {
+    const spell = SPELL_BOOK[keyIdx];
+    const isUnlocked = (activeUser === 'archivis7') || (currentLevel >= spell.unlockLvl) || (spell.id === 'feather_storm') || (spell.id === 'cc_nuke');
+    if (isUnlocked) {
       activeSpellIndex = keyIdx;
-      buildSpellBar();
+      buildSpellBarUI();
     }
   }
-});
+  if (e.code === 'Space' && dashCooldown <= 0 && isPlaying) {
+    performDash();
+  }
+}
 
-function startGame() {
+function performDash() {
+  dashCooldown = 1.0;
+  const dashDir = playerVelocity.lengthSq() > 0 ? playerVelocity.clone().normalize() : new THREE.Vector3(0, 0, -1);
+  playerGroup.position.addScaledVector(dashDir, 5.0);
+  spawnExplosionParticles(playerGroup.position, 0x38bdf8, 25, 16);
+}
+
+window.startGame = function() {
   activeUser = document.getElementById('username-input').value.trim() || 'Caster';
   document.getElementById('start-menu').classList.add('hidden');
   currentLevel = 1;
   activeSpellIndex = 0;
   isPlaying = true;
   initLevel(currentLevel);
-}
+};
 
-function showMenu() {
+window.nextLevel = function() {
+  currentLevel++;
+  if (currentLevel > maxLevel) {
+    maxLevel = currentLevel;
+    localStorage.setItem('spell_max_level', maxLevel.toString());
+  }
+  document.getElementById('clear-menu').classList.add('hidden');
+  isPlaying = true;
+  initLevel(currentLevel);
+};
+
+window.retryLevel = function() {
+  document.getElementById('game-over-menu').classList.add('hidden');
+  isPlaying = true;
+  initLevel(currentLevel);
+};
+
+window.showMenu = function() {
   isPlaying = false;
   document.getElementById('start-menu').classList.remove('hidden');
   document.getElementById('clear-menu').classList.add('hidden');
-}
-
-function showUnlockToast(text) {
-  const toast = document.createElement('div');
-  toast.className = 'unlock-toast';
-  toast.innerText = text;
-  document.getElementById('game-wrapper').appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
-}
+  document.getElementById('game-over-menu').classList.add('hidden');
+  document.getElementById('boss-bar-container').classList.add('hidden');
+  document.getElementById('minion-status').classList.add('hidden');
+};
 
 function initLevel(lvl) {
   const realm = REALMS[(lvl - 1) % REALMS.length];
-  document.getElementById('realm-name').innerText = realm.name;
+  document.getElementById('realm-title').innerText = realm.name;
   document.getElementById('hud-lvl').innerText = lvl;
   document.getElementById('hud-max').innerText = maxLevel;
 
-  buildSpellBar();
+  scene.fog.color.setHex(realm.fog);
+  renderer.setClearColor(realm.bg);
+  rimLight.color.setHex(realm.rim);
 
-  // Notify spell unlocks
-  const newlyUnlocked = SPELL_BOOK.find(s => s.unlockLvl === lvl);
-  if (newlyUnlocked && lvl > 1) {
-    showUnlockToast(`✨ Discovered New Spell: ${newlyUnlocked.name}!`);
-  }
+  playerHp = maxPlayerHp;
+  updatePlayerHealthBar();
+  playerGroup.position.set(0, 0, 8);
 
-  targets = [];
-  spells = [];
+  buildSpellBarUI();
+
+  if (activeBoss) scene.remove(activeBoss.mesh);
+  normalEnemies.forEach(e => scene.remove(e.mesh));
+  projectiles.forEach(p => scene.remove(p.mesh));
+  lingeringZones.forEach(z => scene.remove(z.mesh));
+  particles.forEach(pt => scene.remove(pt.mesh));
+
+  activeBoss = null;
+  normalEnemies = [];
+  projectiles = [];
+  lingeringZones = [];
   particles = [];
 
-  const enemyCount = 4 + lvl * 2;
-  for (let i = 0; i < enemyCount; i++) {
-    targets.push({
-      x: 120 + Math.random() * 720,
-      y: 90 + Math.random() * 260,
-      r: 20 + Math.random() * 6,
-      hp: Math.min(2 + Math.floor(lvl * 1.5), 12),
-      maxHp: Math.min(2 + Math.floor(lvl * 1.5), 12),
-      phase: Math.random() * Math.PI * 2,
-      vx: (Math.random() - 0.5) * (1.2 + lvl * 0.25)
-    });
-  }
+  const isBossLevel = (lvl % 5 === 0);
 
-  // Background Ambient Dust
-  lightBeams = [];
-  for (let i = 0; i < 30; i++) {
-    lightBeams.push({
-      x: Math.random() * 960,
-      y: Math.random() * 640,
-      s: 2 + Math.random() * 4,
-      vy: -0.3 - Math.random() * 0.4,
-      a: 0.15 + Math.random() * 0.4
-    });
-  }
-}
-
-function nextLevel() {
-  document.getElementById('clear-menu').classList.add('hidden');
-  currentLevel++;
-  if (currentLevel - 1 > maxLevel) {
-    maxLevel = currentLevel - 1;
-    localStorage.setItem('spell_max_level', maxLevel);
-  }
-  isPlaying = true;
-  initLevel(currentLevel);
-}
-
-canvas.addEventListener('click', (e) => {
-  if (!isPlaying) return;
-  const rect = canvas.getBoundingClientRect();
-  const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
-  const my = (e.clientY - rect.top) * (canvas.height / rect.height);
-
-  const cos = getCosmetics(activeUser);
-  const spellDef = SPELL_BOOK[activeSpellIndex];
-
-  // User 'archivis7' override: Force Purple & Gold palette
-  let color = spellDef.color;
-  if (cos.isArchivis) {
-    color = (spells.length % 2 === 0) ? cos.primary : cos.secondary;
-  }
-
-  spells.push({
-    type: spellDef.id,
-    x: 480, y: 550,
-    startX: 480, startY: 550,
-    tx: mx, ty: my,
-    color: color,
-    radius: spellDef.radius,
-    damage: spellDef.damage,
-    speed: spellDef.speed,
-    progress: 0
-  });
-});
-
-// Render Entities
-function drawPlayer(verts, time) {
-  const px = 480, py = 550;
-  const floatY = Math.sin(time * 3) * 4;
-  const cos = getCosmetics(activeUser);
-
-  // Arcane Aura Floor Ring
-  pushCenteredQuad(verts, px, py + 25, 70, 0.6, 0.3, 1.0, 0.3 + Math.sin(time * 4) * 0.1, 2);
-
-  // Robe Body
-  pushQuad(verts, px - 20, py - 10 + floatY, 40, 48, 0.1, 0.1, 0.22, 1.0, 0);
-  pushQuad(verts, px - 12, py - 10 + floatY, 24, 48, 0.3, 0.18, 0.5, 1.0, 0);
-
-  // Wizard Head / Hood Base
-  pushCenteredQuad(verts, px, py - 24 + floatY, 28, 0.85, 0.72, 0.6, 1.0, 1);
-
-  // Dynamic Cosmetics Engine
-  if (cos.type === 'fedora') {
-    // Purple Fedora & Feather
-    pushQuad(verts, px - 26, py - 38 + floatY, 52, 6, cos.hatColor[0], cos.hatColor[1], cos.hatColor[2], 1.0, 0);
-    pushQuad(verts, px - 16, py - 54 + floatY, 32, 18, cos.hatColor[0] * 0.8, cos.hatColor[1] * 0.8, cos.hatColor[2] * 0.8, 1.0, 0);
-    pushQuad(verts, px + 10, py - 60 + floatY, 4, 18, cos.featherColor[0], cos.featherColor[1], cos.featherColor[2], 1.0, 0);
-  } else if (cos.type === 'bowler') {
-    // Blue Bowler Hat
-    pushCenteredQuad(verts, px, py - 40 + floatY, 32, cos.hatColor[0], cos.hatColor[1], cos.hatColor[2], 1.0, 1);
-    pushQuad(verts, px - 22, py - 34 + floatY, 44, 6, cos.hatColor[0] * 0.7, cos.hatColor[1] * 0.7, cos.hatColor[2] * 0.7, 1.0, 0);
-  } else if (cos.type === 'green_hat') {
-    // Green Hat & White Feather
-    pushQuad(verts, px - 20, py - 38 + floatY, 40, 8, cos.hatColor[0], cos.hatColor[1], cos.hatColor[2], 1.0, 0);
-    pushQuad(verts, px - 12, py - 50 + floatY, 24, 14, cos.hatColor[0], cos.hatColor[1], cos.hatColor[2], 1.0, 0);
-    pushQuad(verts, px - 14, py - 56 + floatY, 4, 16, cos.featherColor[0], cos.featherColor[1], cos.featherColor[2], 1.0, 0);
-  } else if (cos.type === 'crown') {
-    // Archivist Gold & Purple Crown
-    pushQuad(verts, px - 16, py - 42 + floatY, 32, 10, 1.0, 0.84, 0.1, 1.0, 0);
-    pushCenteredQuad(verts, px - 10, py - 45 + floatY, 6, 0.8, 0.2, 1.0, 1.0, 3);
-    pushCenteredQuad(verts, px, py - 47 + floatY, 8, 0.8, 0.2, 1.0, 1.0, 3);
-    pushCenteredQuad(verts, px + 10, py - 45 + floatY, 6, 0.8, 0.2, 1.0, 1.0, 3);
+  if (isBossLevel) {
+    document.getElementById('minion-status').classList.add('hidden');
+    document.getElementById('boss-bar-container').classList.remove('hidden');
+    spawnMetallicBoss(realm);
   } else {
-    // Default Hood
-    pushCenteredQuad(verts, px, py - 28 + floatY, 34, 0.2, 0.15, 0.35, 1.0, 1);
-  }
-
-  // Caster Staff & Glowing Crystal Orb
-  pushQuad(verts, px + 26, py - 35 + floatY, 5, 70, 0.35, 0.22, 0.12, 1.0, 0);
-  pushCenteredQuad(verts, px + 28, py - 42 + floatY, 22, 0.4, 0.8, 1.0, 0.8 + Math.sin(time * 6) * 0.2, 1);
-}
-
-function drawEnemies(verts, time) {
-  for (let t of targets) {
-    const floatY = t.y + Math.sin(time * 3 + t.phase) * 8;
-    const hpRatio = t.hp / t.maxHp;
-
-    // Glowing Outer Shadow / Shield
-    pushCenteredQuad(verts, t.x, floatY, t.r * 2.8, 0.9, 0.2, 0.4, 0.2, 2);
-
-    // Dark Crystal Core
-    pushCenteredQuad(verts, t.x, floatY, t.r * 1.8, 0.15, 0.08, 0.2, 0.9, 1);
-    pushCenteredQuad(verts, t.x, floatY, t.r * 1.2, 0.9, 0.2, 0.4, 0.8 + Math.sin(time * 5 + t.phase) * 0.2, 3);
-
-    // Health Bar Container
-    pushQuad(verts, t.x - t.r, floatY - t.r - 14, t.r * 2, 5, 0.1, 0.1, 0.15, 0.8, 0);
-    pushQuad(verts, t.x - t.r, floatY - t.r - 14, t.r * 2 * hpRatio, 5, 0.2, 0.9, 0.4, 0.9, 0);
+    document.getElementById('boss-bar-container').classList.add('hidden');
+    document.getElementById('minion-status').classList.remove('hidden');
+    spawnNormalEnemies(lvl);
   }
 }
 
-// Game Loop
-function loop() {
-  gameTime += 0.016;
+function spawnMetallicBoss(realm) {
+  const group = new THREE.Group();
 
-  if (isPlaying) {
-    // Target Movements
-    for (let t of targets) {
-      t.x += t.vx;
-      if (t.x < 70 || t.x > 890) t.vx *= -1;
+  const chromeMat = new THREE.MeshStandardMaterial({
+    color: 0xd4af37,
+    metalness: 0.98,
+    roughness: 0.12,
+    emissive: 0x92400e,
+    emissiveIntensity: 0.3
+  });
+
+  const titaniumMat = new THREE.MeshStandardMaterial({
+    color: 0x334155,
+    metalness: 0.95,
+    roughness: 0.15,
+    emissive: 0x0284c7,
+    emissiveIntensity: 0.4
+  });
+
+  const coreGeo = new THREE.OctahedronGeometry(2.5, 2);
+  const core = new THREE.Mesh(coreGeo, chromeMat);
+  core.castShadow = true;
+  group.add(core);
+
+  const plates = [];
+  for (let i = 0; i < 4; i++) {
+    const plateGeo = new THREE.BoxGeometry(0.4, 2.2, 1.2);
+    const plate = new THREE.Mesh(plateGeo, titaniumMat);
+    group.add(plate);
+    plates.push(plate);
+  }
+
+  const ring1Geo = new THREE.TorusGeometry(3.6, 0.18, 16, 40);
+  const ring1 = new THREE.Mesh(ring1Geo, chromeMat);
+  ring1.rotation.x = Math.PI / 2;
+  group.add(ring1);
+
+  const ring2Geo = new THREE.TorusGeometry(4.2, 0.14, 16, 40);
+  const ring2 = new THREE.Mesh(ring2Geo, titaniumMat);
+  ring2.rotation.y = Math.PI / 2;
+  group.add(ring2);
+
+  const bLight = new THREE.PointLight(0xf59e0b, 2.0, 18);
+  group.add(bLight);
+
+  group.position.set(0, 3.5, -8);
+  scene.add(group);
+
+  const maxHp = 200 + (currentLevel - 1) * 80;
+  activeBoss = {
+    mesh: group,
+    plates: plates,
+    ring1: ring1,
+    ring2: ring2,
+    hp: maxHp,
+    maxHp: maxHp,
+    attackTimer: 0,
+    phase: 1,
+    orbitAngle: 0
+  };
+
+  document.getElementById('boss-title').innerText = `LEVEL ${currentLevel} METALLIC OVERLORD`;
+  updateBossHealthBar();
+}
+
+function spawnNormalEnemies(lvl) {
+  const enemyCount = Math.min(3 + Math.floor(lvl * 1.2), 10);
+  document.getElementById('minion-count').innerText = enemyCount;
+
+  for (let i = 0; i < enemyCount; i++) {
+    const minionGroup = new THREE.Group();
+
+    const bodyGeo = new THREE.IcosahedronGeometry(0.7, 1);
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: 0x3b82f6,
+      emissive: 0x1d4ed8,
+      emissiveIntensity: 0.6,
+      metalness: 0.7,
+      roughness: 0.3
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.castShadow = true;
+    minionGroup.add(body);
+
+    const eyeGeo = new THREE.SphereGeometry(0.2, 8, 8);
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x38bdf8, emissiveIntensity: 1.0 });
+    const eye = new THREE.Mesh(eyeGeo, eyeMat);
+    eye.position.set(0, 0, 0.6);
+    minionGroup.add(eye);
+
+    const angle = (i / enemyCount) * Math.PI * 2 + Math.random() * 0.5;
+    const dist = 10 + Math.random() * 5;
+    minionGroup.position.set(Math.cos(angle) * dist, 1.2, Math.sin(angle) * dist - 2);
+
+    scene.add(minionGroup);
+
+    normalEnemies.push({
+      mesh: minionGroup,
+      hp: 25 + lvl * 5,
+      maxHp: 25 + lvl * 5,
+      attackCd: 1.5 + Math.random() * 2.0,
+      speed: 4.5 + Math.random() * 2.0
+    });
+  }
+}
+
+function updateBossHealthBar() {
+  if (!activeBoss) return;
+  const pct = Math.max(0, (activeBoss.hp / activeBoss.maxHp) * 100);
+  document.getElementById('boss-hp-fill').style.width = `${pct}%`;
+}
+
+function updatePlayerHealthBar() {
+  const pct = Math.max(0, (playerHp / maxPlayerHp) * 100);
+  document.getElementById('player-hp-fill').style.width = `${pct}%`;
+}
+
+function damagePlayer(amount) {
+  if (invulnerableTimer > 0) return;
+  playerHp -= amount;
+  invulnerableTimer = 0.8;
+  updatePlayerHealthBar();
+
+  spawnExplosionParticles(playerGroup.position, 0xf43f5e, 18, 12);
+
+  if (playerHp <= 0) {
+    isPlaying = false;
+    document.getElementById('game-over-menu').classList.remove('hidden');
+  }
+}
+
+function onCastSpell(event) {
+  if (!isPlaying) return;
+
+  const spellDef = SPELL_BOOK[activeSpellIndex];
+  if (!spellDef) return;
+
+  if (activeUser !== 'archivis7' && spellDef.cdTimer > 0) return;
+
+  const mouse = new THREE.Vector2(
+    (event.clientX / window.innerWidth) * 2 - 1,
+    -(event.clientY / window.innerHeight) * 2 + 1
+  );
+
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, camera);
+
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const targetPoint = new THREE.Vector3();
+  raycaster.ray.intersectPlane(groundPlane, targetPoint);
+  if (!targetPoint) return;
+
+  if (activeUser !== 'archivis7') {
+    spellDef.cdTimer = spellDef.cd;
+  }
+
+  const cos = getCosmetics(activeUser);
+  const dmgMult = cos.isArchivis ? 2.5 : 1.0;
+  const origin = staffOrbMesh.getWorldPosition(new THREE.Vector3());
+  const dir = new THREE.Vector3().subVectors(targetPoint, origin).normalize();
+
+  // TANVON'S BEAM OF NIGHT
+  if (spellDef.id === 'tanvon_beam') {
+    const beamEnd = origin.clone().addScaledVector(dir, 40);
+    const beamGroup = new THREE.Group();
+
+    // Outer Void Cylinder Beam
+    const beamGeo = new THREE.CylinderGeometry(0.8, 1.2, 40, 16);
+    const beamMat = new THREE.MeshStandardMaterial({
+      color: 0x2e1065,
+      emissive: 0x3b0764,
+      emissiveIntensity: 3.5,
+      transparent: true,
+      opacity: 0.85
+    });
+    const beamMesh = new THREE.Mesh(beamGeo, beamMat);
+    beamMesh.position.copy(origin.clone().add(beamEnd).multiplyScalar(0.5));
+    beamMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    beamGroup.add(beamMesh);
+
+    // Inner Radiant Core Helix Line
+    const innerGeo = new THREE.CylinderGeometry(0.25, 0.35, 40, 16);
+    const innerMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: 0xc084fc,
+      emissiveIntensity: 6.0
+    });
+    const innerMesh = new THREE.Mesh(innerGeo, innerMat);
+    innerMesh.position.copy(beamMesh.position);
+    innerMesh.quaternion.copy(beamMesh.quaternion);
+    beamGroup.add(innerMesh);
+
+    // Ground Anomaly Ring
+    const ringGeo = new THREE.RingGeometry(0.5, 3.5, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xc084fc, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.rotation.x = Math.PI / 2;
+    ringMesh.position.copy(targetPoint);
+    ringMesh.position.y = 0.08;
+    beamGroup.add(ringMesh);
+
+    scene.add(beamGroup);
+
+    spawnExplosionParticles(targetPoint, 0xc084fc, 45, 18);
+    spawnExplosionParticles(targetPoint, 0x3b0764, 30, 12);
+
+    if (activeBoss && raycaster.ray.distanceToPoint(activeBoss.mesh.position) < 3.8) {
+      damageBoss(spellDef.damage * dmgMult);
     }
-
-    // Process Active Spells
-    for (let i = spells.length - 1; i >= 0; i--) {
-      let s = spells[i];
-      s.progress += s.speed;
-
-      let cx = s.startX + (s.tx - s.startX) * s.progress;
-      let cy = s.startY + (s.ty - s.startY) * s.progress;
-
-      // Particle Trail
-      particles.push({
-        x: cx + (Math.random() - 0.5) * 10,
-        y: cy + (Math.random() - 0.5) * 10,
-        vx: (Math.random() - 0.5) * 1.2,
-        vy: (Math.random() - 0.5) * 1.2,
-        life: 0.8,
-        size: 8 + Math.random() * 8,
-        color: s.color,
-        shape: 1
-      });
-
-      if (s.progress >= 1.0) {
-        // Spell Impact Detonation
-        const burstCount = s.type === 'frost' ? 36 : (s.type === 'fireball' ? 28 : 18);
-        for (let p = 0; p < burstCount; p++) {
-          let ang = Math.random() * Math.PI * 2;
-          let spd = 1.5 + Math.random() * (s.radius * 0.25);
-          particles.push({
-            x: s.tx, y: s.ty,
-            vx: Math.cos(ang) * spd,
-            vy: Math.sin(ang) * spd,
-            life: 1.0,
-            size: 10 + Math.random() * 12,
-            color: s.color,
-            shape: s.type === 'frost' ? 2 : 1
-          });
-        }
-
-        // Damage Collision Logic
-        for (let t of targets) {
-          let dx = t.x - s.tx, dy = t.y - s.ty;
-          if (Math.sqrt(dx * dx + dy * dy) < t.r + s.radius) {
-            t.hp -= s.damage;
-          }
-        }
-        spells.splice(i, 1);
+    for (let i = normalEnemies.length - 1; i >= 0; i--) {
+      if (raycaster.ray.distanceToPoint(normalEnemies[i].mesh.position) < 2.5) {
+        damageMinion(normalEnemies[i], i, spellDef.damage * dmgMult);
       }
     }
 
-    // Particle Lifecycle
-    for (let i = particles.length - 1; i >= 0; i--) {
-      let p = particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.life -= 0.035;
-      if (p.life <= 0) particles.splice(i, 1);
+    setTimeout(() => {
+      scene.remove(beamGroup);
+    }, 180);
+    return;
+  }
+
+  // ASTRAL STORM (GREEN, PURPLE, ORANGE METEORS)
+  if (spellDef.id === 'astral_storm') {
+    const meteorColors = [0x22c55e, 0xa855f7, 0xf97316];
+    
+    for (let i = 0; i < 24; i++) {
+      setTimeout(() => {
+        if (!isPlaying) return;
+        const color = meteorColors[i % meteorColors.length];
+        const offset = new THREE.Vector3(
+          (Math.random() - 0.5) * 16,
+          0,
+          (Math.random() - 0.5) * 16
+        );
+        const dropTarget = targetPoint.clone().add(offset);
+        const dropStart = dropTarget.clone().add(new THREE.Vector3((Math.random() - 0.5) * 6, 25, (Math.random() - 0.5) * 6));
+
+        const meteorGeo = new THREE.IcosahedronGeometry(0.6 + Math.random() * 0.4, 1);
+        const meteorMat = new THREE.MeshStandardMaterial({
+          color: color,
+          emissive: color,
+          emissiveIntensity: 3.5
+        });
+        const meteor = new THREE.Mesh(meteorGeo, meteorMat);
+        meteor.position.copy(dropStart);
+        scene.add(meteor);
+
+        const mDir = new THREE.Vector3().subVectors(dropTarget, dropStart).normalize();
+
+        projectiles.push({
+          mesh: meteor,
+          dir: mDir,
+          speed: 38 + Math.random() * 12,
+          damage: (spellDef.damage / 4) * dmgMult,
+          radius: 1.8,
+          color: color,
+          type: 'astral_meteor',
+          targetY: dropTarget.y + 0.5,
+          life: 1.5
+        });
+      }, i * 75);
+    }
+    return;
+  }
+
+  // INFERNO NOVA (FIREBALL)
+  if (spellDef.id === 'fireball') {
+    const fireGroup = new THREE.Group();
+    
+    const coreGeo = new THREE.SphereGeometry(spellDef.radius * 0.5, 16, 16);
+    const coreMat = new THREE.MeshStandardMaterial({ 
+      color: 0xffffff, 
+      emissive: 0xfff066, 
+      emissiveIntensity: 4.5 
+    });
+    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+    fireGroup.add(coreMesh);
+
+    const plasmaRingGeo = new THREE.TorusGeometry(spellDef.radius * 0.7, 0.08, 12, 24);
+    const plasmaRingMat = new THREE.MeshStandardMaterial({
+      color: 0xff4500,
+      emissive: 0xff3300,
+      emissiveIntensity: 3.5
+    });
+    const plasmaRing = new THREE.Mesh(plasmaRingGeo, plasmaRingMat);
+    fireGroup.add(plasmaRing);
+
+    const outerGeo = new THREE.IcosahedronGeometry(spellDef.radius, 2);
+    const outerMat = new THREE.MeshStandardMaterial({ 
+      color: 0xe11d48, 
+      emissive: 0xf97316, 
+      emissiveIntensity: 3.0, 
+      transparent: true, 
+      opacity: 0.85,
+      wireframe: true 
+    });
+    const outerMesh = new THREE.Mesh(outerGeo, outerMat);
+    fireGroup.add(outerMesh);
+
+    const fLight = new THREE.PointLight(0xf97316, 6.0, 18);
+    fireGroup.add(fLight);
+
+    fireGroup.position.copy(origin);
+    scene.add(fireGroup);
+
+    projectiles.push({
+      mesh: fireGroup,
+      outerMesh: outerMesh,
+      coreMesh: coreMesh,
+      plasmaRing: plasmaRing,
+      light: fLight,
+      dir: dir,
+      speed: spellDef.speed,
+      damage: spellDef.damage * dmgMult,
+      radius: spellDef.radius,
+      color: spellDef.color,
+      type: 'fireball',
+      life: 3.0
+    });
+    return;
+  }
+
+  // CC NUKE
+  if (spellDef.id === 'cc_nuke') {
+    const nukeGroup = new THREE.Group();
+
+    const beamGeo = new THREE.CylinderGeometry(1.2, 2.5, 60, 16);
+    const beamMat = new THREE.MeshStandardMaterial({
+      color: 0x4ade80,
+      emissive: 0x22c55e,
+      emissiveIntensity: 4.5,
+      transparent: true,
+      opacity: 0.85
+    });
+    const skyBeam = new THREE.Mesh(beamGeo, beamMat);
+    skyBeam.position.set(0, 30, 0);
+    nukeGroup.add(skyBeam);
+
+    const nukeGeo = new THREE.SphereGeometry(1, 32, 32);
+    const nukeMat = new THREE.MeshStandardMaterial({
+      color: 0x22c55e,
+      emissive: 0x86efac,
+      emissiveIntensity: 4.0,
+      transparent: true,
+      opacity: 0.95
+    });
+    const nukeSphere = new THREE.Mesh(nukeGeo, nukeMat);
+    nukeSphere.position.y = 1.0;
+    nukeGroup.add(nukeSphere);
+
+    const ringGeo = new THREE.RingGeometry(0.5, 2.0, 64);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x86efac, side: THREE.DoubleSide, transparent: true, opacity: 1.0 });
+    const blastRing = new THREE.Mesh(ringGeo, ringMat);
+    blastRing.rotation.x = Math.PI / 2;
+    blastRing.position.y = 0.1;
+    nukeGroup.add(blastRing);
+
+    const torusGeo = new THREE.TorusGeometry(1, 0.3, 16, 40);
+    const torusMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x4ade80, emissiveIntensity: 3.5, transparent: true, opacity: 0.9 });
+    const blastTorus = new THREE.Mesh(torusGeo, torusMat);
+    blastTorus.rotation.x = Math.PI / 2;
+    blastTorus.position.y = 0.2;
+    nukeGroup.add(blastTorus);
+
+    const flashLight = new THREE.PointLight(0x4ade80, 25.0, 65);
+    flashLight.position.y = 4.0;
+    nukeGroup.add(flashLight);
+
+    nukeGroup.position.copy(targetPoint);
+    scene.add(nukeGroup);
+
+    spawnExplosionParticles(targetPoint, 0x22c55e, 150, 20);
+    spawnExplosionParticles(targetPoint, 0xfacc15, 80, 24);
+
+    projectiles.push({
+      mesh: nukeGroup,
+      nukeSphere: nukeSphere,
+      skyBeam: skyBeam,
+      ringMesh: blastRing,
+      torusMesh: blastTorus,
+      light: flashLight,
+      type: 'cc_nuke_blast',
+      damage: spellDef.damage * dmgMult,
+      radius: 0.1,
+      maxRadius: 22.0,
+      life: 0.9
+    });
+
+    if (activeBoss) {
+      if (activeBoss.mesh.position.distanceTo(targetPoint) < 22.0) {
+        damageBoss(spellDef.damage * dmgMult);
+      }
+    }
+    for (let i = normalEnemies.length - 1; i >= 0; i--) {
+      if (normalEnemies[i].mesh.position.distanceTo(targetPoint) < 22.0) {
+        damageMinion(normalEnemies[i], i, spellDef.damage * dmgMult);
+      }
+    }
+    return;
+  }
+
+  // BUFFED FEATHER STORM
+  if (spellDef.id === 'feather_storm') {
+    const sealGeo = new THREE.RingGeometry(1, 18, 64);
+    const sealMat = new THREE.MeshBasicMaterial({ color: 0xd946ef, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
+    const seal = new THREE.Mesh(sealGeo, sealMat);
+    seal.rotation.x = Math.PI / 2;
+    seal.position.copy(playerGroup.position);
+    seal.position.y = 0.05;
+    scene.add(seal);
+
+    particles.push({
+      mesh: seal,
+      type: 'fade_ring',
+      life: 1.8
+    });
+
+    for (let i = 0; i < 240; i++) {
+      const featherGroup = new THREE.Group();
+      const featherGeo = new THREE.ConeGeometry(0.18, 1.2, 5);
+      const featherMat = new THREE.MeshStandardMaterial({ color: 0x7e22ce, emissive: 0xf97316, emissiveIntensity: 3.5 });
+      const feather = new THREE.Mesh(featherGeo, featherMat);
+      featherGroup.add(feather);
+
+      const sparkGeo = new THREE.SphereGeometry(0.09, 6, 6);
+      const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+      const spark = new THREE.Mesh(sparkGeo, sparkMat);
+      spark.position.y = 0.6;
+      featherGroup.add(spark);
+
+      const radius = 1.0 + Math.random() * 18;
+      const angle = Math.random() * Math.PI * 2;
+      featherGroup.position.set(
+        playerGroup.position.x + Math.cos(angle) * radius,
+        0.5 + Math.random() * 4.5,
+        playerGroup.position.z + Math.sin(angle) * radius
+      );
+      featherGroup.rotation.z = Math.random() * Math.PI;
+      scene.add(featherGroup);
+
+      particles.push({
+        mesh: featherGroup,
+        type: 'feather_storm',
+        vel: new THREE.Vector3(-Math.sin(angle) * 24, 2.5 + Math.random() * 2.0, Math.cos(angle) * 24),
+        life: 2.2
+      });
     }
 
-    // Level Clear Check
-    targets = targets.filter(t => t.hp > 0);
-    if (targets.length === 0) {
-      isPlaying = false;
-      document.getElementById('clear-sub').innerText = `Realm ${currentLevel} Purified!`;
-      document.getElementById('clear-menu').classList.remove('hidden');
+    if (activeBoss) damageBoss(spellDef.damage * dmgMult);
+    normalEnemies.forEach((e, idx) => damageMinion(e, idx, spellDef.damage * dmgMult));
+    return;
+  }
+
+  // CHAIN VOLT (LIGHTNING)
+  if (spellDef.type === 'hitscan_beam') {
+    const beamEnd = origin.clone().addScaledVector(dir, 35);
+    
+    const points = generateLightningPath(origin, beamEnd);
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
+    const beamMesh = new THREE.Line(lineGeo, lineMat);
+    scene.add(beamMesh);
+
+    const branchPoints = generateLightningPath(origin, beamEnd, 1.8);
+    const branchGeo = new THREE.BufferGeometry().setFromPoints(branchPoints);
+    const branchMat = new THREE.LineBasicMaterial({ color: spellDef.color, linewidth: 2 });
+    const branchMesh = new THREE.Line(branchGeo, branchMat);
+    scene.add(branchMesh);
+
+    const flashGeo = new THREE.SphereGeometry(0.9, 16, 16);
+    const flashMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: spellDef.color, emissiveIntensity: 4.5 });
+    const flashMesh = new THREE.Mesh(flashGeo, flashMat);
+    flashMesh.position.copy(beamEnd);
+    scene.add(flashMesh);
+
+    const ringGeo = new THREE.RingGeometry(0.2, 1.5, 24);
+    const ringMat = new THREE.MeshBasicMaterial({ color: spellDef.color, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
+    const impactRing = new THREE.Mesh(ringGeo, ringMat);
+    impactRing.rotation.x = Math.PI / 2;
+    impactRing.position.copy(beamEnd);
+    impactRing.position.y = 0.1;
+    scene.add(impactRing);
+
+    spawnExplosionParticles(beamEnd, spellDef.color, 30, 14);
+
+    if (activeBoss && raycaster.ray.distanceToPoint(activeBoss.mesh.position) < 3.0) {
+      damageBoss(spellDef.damage * dmgMult);
+      spawnExplosionParticles(activeBoss.mesh.position, spellDef.color, 16);
     }
+
+    for (let i = normalEnemies.length - 1; i >= 0; i--) {
+      if (raycaster.ray.distanceToPoint(normalEnemies[i].mesh.position) < 1.2) {
+        damageMinion(normalEnemies[i], i, spellDef.damage * dmgMult);
+      }
+    }
+
+    setTimeout(() => {
+      scene.remove(beamMesh);
+      scene.remove(branchMesh);
+      scene.remove(flashMesh);
+      scene.remove(impactRing);
+    }, 100);
+
+  // FROST WAVE
+  } else if (spellDef.type === 'cone_shockwave') {
+    const frostGroup = new THREE.Group();
+
+    const ringGeo = new THREE.RingGeometry(0.5, 1.8, 32, 1, -Math.PI * 0.3, Math.PI * 0.6);
+    const ringMat = new THREE.MeshStandardMaterial({ 
+      color: 0x38edf8, 
+      emissive: 0x0284c7, 
+      emissiveIntensity: 2.5,
+      side: THREE.DoubleSide, 
+      transparent: true, 
+      opacity: 0.85 
+    });
+    const waveMesh = new THREE.Mesh(ringGeo, ringMat);
+    waveMesh.rotation.x = Math.PI / 2;
+    waveMesh.rotation.z = Math.atan2(-dir.z, dir.x);
+    waveMesh.position.y = 0.1;
+    frostGroup.add(waveMesh);
+
+    const shardCount = 7;
+    const shards = [];
+    for (let i = 0; i < shardCount; i++) {
+      const shardGeo = new THREE.ConeGeometry(0.2, 1.2, 5);
+      const shardMat = new THREE.MeshStandardMaterial({ color: 0xe0f2fe, emissive: 0x38edf8, emissiveIntensity: 1.8, roughness: 0.1 });
+      const shard = new THREE.Mesh(shardGeo, shardMat);
+      const angleOffset = (-0.3 + (i / (shardCount - 1)) * 0.6) * Math.PI;
+      const localDir = dir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angleOffset);
+      shard.position.copy(localDir.clone().multiplyScalar(1.2));
+      shard.position.y = 0.6;
+      shard.rotation.x = 0.4;
+      shard.rotation.y = Math.atan2(-localDir.z, localDir.x);
+      frostGroup.add(shard);
+      shards.push(shard);
+    }
+
+    frostGroup.position.copy(playerGroup.position);
+    scene.add(frostGroup);
+
+    projectiles.push({
+      mesh: frostGroup,
+      waveMesh: waveMesh,
+      shards: shards,
+      type: 'cone_shockwave',
+      damage: spellDef.damage * dmgMult,
+      radius: 1.0,
+      color: spellDef.color,
+      dir: dir,
+      life: 0.65
+    });
+
+  // VOID SINGULAR
+  } else if (spellDef.type === 'gravity_vortex') {
+    const vortexGroup = new THREE.Group();
+
+    const coreGeo = new THREE.SphereGeometry(spellDef.radius * 0.7, 24, 24);
+    const coreMat = new THREE.MeshStandardMaterial({ color: 0x030008, emissive: 0x3b0764, emissiveIntensity: 1.2, roughness: 0.9 });
+    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+    vortexGroup.add(coreMesh);
+
+    const ring1Geo = new THREE.TorusGeometry(spellDef.radius * 1.3, 0.12, 16, 48);
+    const ring1Mat = new THREE.MeshStandardMaterial({ color: 0xa855f7, emissive: 0xd946ef, emissiveIntensity: 3.5 });
+    const ring1 = new THREE.Mesh(ring1Geo, ring1Mat);
+    ring1.rotation.x = Math.PI / 2.2;
+    vortexGroup.add(ring1);
+
+    const ring2Geo = new THREE.TorusGeometry(spellDef.radius * 1.8, 0.08, 16, 48);
+    const ring2Mat = new THREE.MeshStandardMaterial({ color: 0x6b21a8, emissive: 0xa855f7, emissiveIntensity: 2.5 });
+    const ring2 = new THREE.Mesh(ring2Geo, ring2Mat);
+    ring2.rotation.y = Math.PI / 3;
+    vortexGroup.add(ring2);
+
+    const motes = [];
+    for (let i = 0; i < 12; i++) {
+      const moteGeo = new THREE.OctahedronGeometry(0.1);
+      const moteMat = new THREE.MeshBasicMaterial({ color: 0xf0abfc });
+      const mote = new THREE.Mesh(moteGeo, moteMat);
+      vortexGroup.add(mote);
+      motes.push({ mesh: mote, angle: (i / 12) * Math.PI * 2, dist: spellDef.radius * 1.5 + Math.random() * 0.8, speed: 3.0 + Math.random() * 2.0 });
+    }
+
+    const sealGeo = new THREE.RingGeometry(0.5, spellDef.radius * 3.5, 36);
+    const sealMat = new THREE.MeshBasicMaterial({ color: 0x7e22ce, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
+    const seal = new THREE.Mesh(sealGeo, sealMat);
+    seal.rotation.x = Math.PI / 2;
+    seal.position.y = -1.4;
+    vortexGroup.add(seal);
+
+    const vLight = new THREE.PointLight(0xa855f7, 4.5, 20);
+    vortexGroup.add(vLight);
+
+    vortexGroup.position.copy(targetPoint);
+    vortexGroup.position.y = 1.5;
+    scene.add(vortexGroup);
+
+    lingeringZones.push({
+      mesh: vortexGroup,
+      ring1: ring1,
+      ring2: ring2,
+      motes: motes,
+      seal: seal,
+      type: 'vortex',
+      damage: spellDef.damage * dmgMult,
+      radius: 6.0,
+      life: 3.5,
+      color: spellDef.color
+    });
+
+  // SEEKER ORBS
+  } else {
+    const orbGroup = new THREE.Group();
+
+    const geo = new THREE.SphereGeometry(spellDef.radius * 0.6, 16, 16);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: spellDef.emissive, emissiveIntensity: 3.5 });
+    const orbCore = new THREE.Mesh(geo, mat);
+    orbGroup.add(orbCore);
+
+    const ringGeo = new THREE.TorusGeometry(spellDef.radius * 0.9, 0.05, 12, 24);
+    const ringMat = new THREE.MeshStandardMaterial({ color: spellDef.color, emissive: spellDef.color, emissiveIntensity: 2.5 });
+    const energyRing = new THREE.Mesh(ringGeo, ringMat);
+    orbGroup.add(energyRing);
+
+    const oLight = new THREE.PointLight(spellDef.color, 2.5, 12);
+    orbGroup.add(oLight);
+
+    orbGroup.position.copy(origin);
+    scene.add(orbGroup);
+
+    projectiles.push({
+      mesh: orbGroup,
+      energyRing: energyRing,
+      dir: dir,
+      speed: spellDef.speed,
+      damage: spellDef.damage * dmgMult,
+      radius: spellDef.radius,
+      color: spellDef.color,
+      type: spellDef.type,
+      life: 3.0
+    });
   }
-
-  // Clear WebGL Context
-  const realm = REALMS[(currentLevel - 1) % REALMS.length];
-  gl.viewport(0, 0, canvas.width, canvas.height);
-  gl.clearColor(realm.bg[0], realm.bg[1], realm.bg[2], 1.0);
-  gl.clear(gl.COLOR_BUFFER_BIT);
-
-  gl.useProgram(program);
-  gl.uniform2f(resLoc, canvas.width, canvas.height);
-
-  const verts = [];
-
-  // Background Ambient Dust
-  for (let p of lightBeams) {
-    p.y += p.vy;
-    if (p.y < 0) p.y = 640;
-    pushCenteredQuad(verts, p.x, p.y, p.s, realm.accent[0], realm.accent[1], realm.accent[2], p.a, 3);
-  }
-
-  // Draw Game World
-  drawPlayer(verts, gameTime);
-  drawEnemies(verts, gameTime);
-
-  // Draw Moving Spell Projectiles
-  for (let s of spells) {
-    let cx = s.startX + (s.tx - s.startX) * s.progress;
-    let cy = s.startY + (s.ty - s.startY) * s.progress;
-    let c = s.color;
-
-    pushCenteredQuad(verts, cx, cy, s.radius * 2.5, c[0], c[1], c[2], 0.4, 2); // Outer Shock Aura
-    pushCenteredQuad(verts, cx, cy, s.radius * 1.5, c[0], c[1], c[2], 0.9, 1); // Core
-    pushCenteredQuad(verts, cx, cy, s.radius * 0.8, 1.0, 1.0, 1.0, 0.95, 3); // Center Spark
-  }
-
-  // Draw Spell Burst Particles
-  for (let p of particles) {
-    let c = p.color;
-    pushCenteredQuad(verts, p.x, p.y, p.size * p.life, c[0], c[1], c[2], p.life, p.shape);
-  }
-
-  // Send Quad Buffer to GPU
-  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.DYNAMIC_DRAW);
-  gl.bindVertexArray(vao);
-  gl.drawArrays(gl.TRIANGLES, 0, verts.length / 9);
-
-  requestAnimationFrame(loop);
 }
 
-// Initialize Profile UI & Engine
+function generateLightningPath(start, end, jitterMult = 1.0) {
+  const points = [start];
+  const count = 10;
+  const vec = new THREE.Vector3().subVectors(end, start);
+  for (let i = 1; i < count; i++) {
+    const p = start.clone().addScaledVector(vec, i / count);
+    p.x += (Math.random() - 0.5) * 1.2 * jitterMult;
+    p.y += (Math.random() - 0.5) * 1.2 * jitterMult;
+    p.z += (Math.random() - 0.5) * 1.2 * jitterMult;
+    points.push(p);
+  }
+  points.push(end);
+  return points;
+}
+
+function damageBoss(amt) {
+  if (!activeBoss) return;
+  activeBoss.hp -= amt;
+  updateBossHealthBar();
+
+  if (activeBoss.hp <= activeBoss.maxHp * 0.5 && activeBoss.phase === 1) {
+    activeBoss.phase = 2;
+  }
+
+  if (activeBoss.hp <= 0) {
+    spawnExplosionParticles(activeBoss.mesh.position, 0xf59e0b, 80, 20);
+    scene.remove(activeBoss.mesh);
+    activeBoss = null;
+    document.getElementById('boss-bar-container').classList.add('hidden');
+
+    setTimeout(() => {
+      isPlaying = false;
+      document.getElementById('clear-sub').innerText = `Boss Level ${currentLevel} Banished! Metallic Core Destroyed.`;
+      document.getElementById('clear-menu').classList.remove('hidden');
+    }, 600);
+  }
+}
+
+function damageMinion(minion, index, amt) {
+  if (!minion) return;
+  minion.hp -= amt;
+  spawnExplosionParticles(minion.mesh.position, 0x38bdf8, 12, 10);
+
+  if (minion.hp <= 0) {
+    scene.remove(minion.mesh);
+    normalEnemies.splice(index, 1);
+    document.getElementById('minion-count').innerText = normalEnemies.length;
+
+    if (normalEnemies.length === 0 && (currentLevel % 5 !== 0)) {
+      setTimeout(() => {
+        isPlaying = false;
+        document.getElementById('clear-sub').innerText = `Stage ${currentLevel} Minion Wave Cleared!`;
+        document.getElementById('clear-menu').classList.remove('hidden');
+      }, 400);
+    }
+  }
+}
+
+function spawnExplosionParticles(pos, color, count = 15, maxSpeed = 14) {
+  for (let i = 0; i < count; i++) {
+    const scale = 0.08 + Math.random() * 0.16;
+    const geo = Math.random() > 0.5 ? new THREE.SphereGeometry(scale, 8, 8) : new THREE.DodecahedronGeometry(scale);
+    const mat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 1.0 });
+    const pMesh = new THREE.Mesh(geo, mat);
+    pMesh.position.copy(pos);
+    scene.add(pMesh);
+
+    const velocity = new THREE.Vector3(
+      (Math.random() - 0.5) * maxSpeed,
+      (Math.random() - 0.2) * (maxSpeed * 0.7),
+      (Math.random() - 0.5) * maxSpeed
+    );
+
+    particles.push({ mesh: pMesh, vel: velocity, life: 0.35 + Math.random() * 0.45, maxLife: 0.8 });
+  }
+}
+
+function updateMetallicBossAI(delta, time) {
+  if (!activeBoss) return;
+
+  activeBoss.orbitAngle += delta * (activeBoss.phase === 2 ? 0.9 : 0.45);
+  activeBoss.mesh.position.x = Math.sin(activeBoss.orbitAngle) * 7;
+  activeBoss.mesh.position.z = -7 + Math.cos(activeBoss.orbitAngle) * 3.5;
+  activeBoss.mesh.position.y = 3.5 + Math.sin(time * 2.0) * 0.4;
+
+  activeBoss.ring1.rotation.z = time * 2.0;
+  activeBoss.ring2.rotation.x = time * 2.5;
+
+  activeBoss.plates.forEach((plate, idx) => {
+    const angle = time * 2.5 + (idx / activeBoss.plates.length) * Math.PI * 2;
+    plate.position.set(Math.cos(angle) * 3.2, Math.sin(angle) * 1.2, Math.sin(angle) * 3.2);
+    plate.rotation.y = angle;
+  });
+
+  activeBoss.attackTimer += delta;
+  const cooldown = activeBoss.phase === 2 ? 1.3 : 2.0;
+
+  if (activeBoss.attackTimer >= cooldown) {
+    activeBoss.attackTimer = 0;
+    const attackChoice = Math.random();
+
+    if (attackChoice < 0.5) {
+      const count = activeBoss.phase === 2 ? 12 : 8;
+      for (let i = 0; i < count; i++) {
+        const angle = (i / count) * Math.PI * 2 + time;
+        const dir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+        
+        const geo = new THREE.SphereGeometry(0.45, 12, 12);
+        const mat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.9, roughness: 0.2 });
+        const orb = new THREE.Mesh(geo, mat);
+        orb.position.copy(activeBoss.mesh.position);
+        scene.add(orb);
+
+        projectiles.push({
+          mesh: orb,
+          dir: dir,
+          speed: 11,
+          damage: 16,
+          radius: 0.45,
+          color: 0xf59e0b,
+          type: 'hostile',
+          life: 4.0
+        });
+      }
+    } else {
+      const dir = new THREE.Vector3().subVectors(playerGroup.position, activeBoss.mesh.position).normalize();
+      const geo = new THREE.SphereGeometry(0.65, 12, 12);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xef4444, metalness: 0.95, roughness: 0.1 });
+      const trackingBolt = new THREE.Mesh(geo, mat);
+      trackingBolt.position.copy(activeBoss.mesh.position);
+      scene.add(trackingBolt);
+
+      projectiles.push({
+        mesh: trackingBolt,
+        dir: dir,
+        speed: 15,
+        damage: 22,
+        radius: 0.65,
+        color: 0xef4444,
+        type: 'hostile_tracking',
+        life: 3.5
+      });
+    }
+  }
+}
+
+function updateNormalEnemies(delta) {
+  normalEnemies.forEach((e) => {
+    const toPlayer = new THREE.Vector3().subVectors(playerGroup.position, e.mesh.position);
+    toPlayer.y = 0;
+    const dist = toPlayer.length();
+
+    if (dist > 1.8) {
+      toPlayer.normalize();
+      e.mesh.position.addScaledVector(toPlayer, e.speed * delta);
+    } else {
+      damagePlayer(10 * delta);
+    }
+
+    e.attackCd -= delta;
+    if (e.attackCd <= 0 && dist < 12.0) {
+      e.attackCd = 2.5 + Math.random() * 1.5;
+      const boltDir = toPlayer.clone().normalize();
+      
+      const geo = new THREE.SphereGeometry(0.25, 8, 8);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+      const bolt = new THREE.Mesh(geo, mat);
+      bolt.position.copy(e.mesh.position);
+      scene.add(bolt);
+
+      projectiles.push({
+        mesh: bolt,
+        dir: boltDir,
+        speed: 12,
+        damage: 8,
+        radius: 0.25,
+        color: 0x38bdf8,
+        type: 'hostile',
+        life: 3.0
+      });
+    }
+  });
+}
+
+function updatePlayerMovement(delta) {
+  if (dashCooldown > 0) dashCooldown -= delta;
+
+  const moveSpeed = 11.0;
+  playerVelocity.set(0, 0, 0);
+
+  if (keyState['KeyW'] || keyState['ArrowUp']) playerVelocity.z -= 1;
+  if (keyState['KeyS'] || keyState['ArrowDown']) playerVelocity.z += 1;
+  if (keyState['KeyA'] || keyState['ArrowLeft']) playerVelocity.x -= 1;
+  if (keyState['KeyD'] || keyState['ArrowRight']) playerVelocity.x += 1;
+
+  if (playerVelocity.lengthSq() > 0) {
+    playerVelocity.normalize().multiplyScalar(moveSpeed * delta);
+    playerGroup.position.add(playerVelocity);
+
+    const angle = Math.atan2(playerVelocity.x, playerVelocity.z);
+    playerGroup.rotation.y = angle;
+
+    const dist = playerGroup.position.length();
+    if (dist > 16.5) playerGroup.position.multiplyScalar(16.5 / dist);
+  }
+}
+
+function animatePlayerModel(time, delta) {
+  if (!playerGroup) return;
+
+  playerBody.position.y = Math.sin(time * 3.5) * 0.12;
+
+  if (staffInnerRing && staffOuterRing && staffCrystal) {
+    staffInnerRing.rotation.x = time * 3.0;
+    staffInnerRing.rotation.y = time * 2.0;
+    
+    staffOuterRing.rotation.y = -time * 3.5;
+    staffOuterRing.rotation.z = time * 2.2;
+
+    staffCrystal.rotation.y = time * 4.0;
+    staffCrystal.position.y = 1.7 + Math.sin(time * 5.0) * 0.05;
+
+    orbLight.intensity = 2.5 + Math.sin(time * 8.0) * 0.6;
+  }
+
+  floatingManaMotes.forEach(moteObj => {
+    const angle = time * moteObj.speed + moteObj.offset;
+    const r = 0.55;
+    moteObj.mesh.position.set(
+      Math.cos(angle) * r,
+      1.7 + Math.sin(angle * 2.0) * 0.15,
+      Math.sin(angle) * r
+    );
+  });
+
+  if (runicAuraMesh) {
+    runicAuraMesh.rotation.z = -time * 0.8;
+    runicAuraMesh.material.opacity = 0.45 + Math.sin(time * 4.0) * 0.2;
+  }
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const delta = clock.getDelta();
+  const time = clock.getElapsedTime();
+
+  if (invulnerableTimer > 0) invulnerableTimer -= delta;
+
+  SPELL_BOOK.forEach((spell, idx) => {
+    if (spell.cdTimer > 0) {
+      spell.cdTimer = Math.max(0, spell.cdTimer - delta);
+      const overlay = document.getElementById(`cd-overlay-${idx}`);
+      if (overlay) {
+        const pct = (spell.cdTimer / spell.cd) * 100;
+        overlay.style.height = `${pct}%`;
+      }
+    }
+  });
+
+  obelisks.forEach(ob => {
+    ob.group.position.y = Math.sin(time * 1.5 + ob.offset) * 0.3;
+  });
+
+  animatePlayerModel(time, delta);
+
+  if (isPlaying) {
+    updatePlayerMovement(delta);
+
+    if (currentLevel % 5 === 0) {
+      updateMetallicBossAI(delta, time);
+    } else {
+      updateNormalEnemies(delta);
+    }
+
+    for (let i = lingeringZones.length - 1; i >= 0; i--) {
+      const z = lingeringZones[i];
+      z.life -= delta;
+
+      if (z.type === 'vortex') {
+        z.mesh.rotation.y += delta * 3.5;
+        if (z.ring1) z.ring1.rotation.x += delta * 4.0;
+        if (z.ring2) z.ring2.rotation.z -= delta * 3.0;
+
+        if (z.motes) {
+          z.motes.forEach(moteObj => {
+            moteObj.angle += delta * moteObj.speed;
+            moteObj.mesh.position.set(
+              Math.cos(moteObj.angle) * moteObj.dist,
+              Math.sin(moteObj.angle * 2) * 0.3,
+              Math.sin(moteObj.angle) * moteObj.dist
+            );
+          });
+        }
+
+        if (z.seal) {
+          z.seal.rotation.z -= delta * 1.5;
+        }
+
+        if (activeBoss) {
+          const dist = activeBoss.mesh.position.distanceTo(z.mesh.position);
+          if (dist < z.radius) {
+            const pull = new THREE.Vector3().subVectors(z.mesh.position, activeBoss.mesh.position).normalize();
+            activeBoss.mesh.position.addScaledVector(pull, 3.5 * delta);
+            damageBoss(z.damage * delta);
+          }
+        }
+        normalEnemies.forEach((e, idx) => {
+          if (e.mesh.position.distanceTo(z.mesh.position) < z.radius) {
+            const pull = new THREE.Vector3().subVectors(z.mesh.position, e.mesh.position).normalize();
+            e.mesh.position.addScaledVector(pull, 4.5 * delta);
+            damageMinion(e, idx, z.damage * delta);
+          }
+        });
+      }
+
+      if (z.life <= 0) {
+        scene.remove(z.mesh);
+        lingeringZones.splice(i, 1);
+      }
+    }
+
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const p = projectiles[i];
+
+      if (p.type === 'astral_meteor') {
+        p.mesh.position.addScaledVector(p.dir, p.speed * delta);
+        
+        spawnExplosionParticles(p.mesh.position, p.color, 2, 4);
+
+        if (p.mesh.position.y <= p.targetY) {
+          spawnExplosionParticles(p.mesh.position, p.color, 25, 14);
+          
+          if (activeBoss && p.mesh.position.distanceTo(activeBoss.mesh.position) < p.radius + 1.5) {
+            damageBoss(p.damage);
+          }
+          for (let j = normalEnemies.length - 1; j >= 0; j--) {
+            if (p.mesh.position.distanceTo(normalEnemies[j].mesh.position) < p.radius + 0.8) {
+              damageMinion(normalEnemies[j], j, p.damage);
+            }
+          }
+
+          scene.remove(p.mesh);
+          projectiles.splice(i, 1);
+          continue;
+        }
+      }
+
+      if (p.type === 'fireball') {
+        if (p.outerMesh) {
+          p.outerMesh.rotation.x += delta * 8.0;
+          p.outerMesh.rotation.y += delta * 10.0;
+          const pulse = 1.0 + Math.sin(time * 22.0) * 0.2;
+          p.outerMesh.scale.set(pulse, pulse, pulse);
+        }
+        if (p.plasmaRing) {
+          p.plasmaRing.rotation.z += delta * 6.0;
+        }
+
+        for (let t = 0; t < 2; t++) {
+          const trailGeo = new THREE.SphereGeometry(0.08 + Math.random() * 0.12, 8, 8);
+          const trailColor = Math.random() > 0.4 ? 0xf97316 : 0xfacc15;
+          const trailMat = new THREE.MeshBasicMaterial({ color: trailColor, transparent: true, opacity: 0.85 });
+          const trailMesh = new THREE.Mesh(trailGeo, trailMat);
+          trailMesh.position.copy(p.mesh.position).add(new THREE.Vector3(
+            (Math.random() - 0.5) * 0.4,
+            (Math.random() - 0.5) * 0.4,
+            (Math.random() - 0.5) * 0.4
+          ));
+          scene.add(trailMesh);
+          particles.push({
+            mesh: trailMesh,
+            vel: new THREE.Vector3((Math.random() - 0.5) * 2.0, Math.random() * 2.5, (Math.random() - 0.5) * 2.0),
+            life: 0.25 + Math.random() * 0.15,
+            maxLife: 0.4
+          });
+        }
+      }
+
+      if (p.type === 'cc_nuke_blast') {
+        p.life -= delta;
+        p.radius += 32.0 * delta;
+
+        if (p.nukeSphere) p.nukeSphere.scale.set(p.radius, p.radius * 0.6, p.radius);
+        if (p.ringMesh) p.ringMesh.scale.set(p.radius, p.radius, 1);
+        if (p.torusMesh) p.torusMesh.scale.set(p.radius * 0.8, p.radius * 0.8, p.radius * 0.8);
+        if (p.skyBeam) {
+          p.skyBeam.scale.set(Math.max(0.01, 1.0 - (1.0 - p.life / 0.9)), 1, Math.max(0.01, 1.0 - (1.0 - p.life / 0.9)));
+          p.skyBeam.material.opacity = Math.max(0, p.life / 0.9);
+        }
+        if (p.light) p.light.intensity = Math.max(0, p.light.intensity - delta * 22.0);
+        
+        if (p.nukeSphere) p.nukeSphere.material.opacity = Math.max(0, p.life / 0.9);
+        if (p.ringMesh) p.ringMesh.material.opacity = Math.max(0, p.life / 0.9);
+
+        if (p.life <= 0) {
+          scene.remove(p.mesh);
+          projectiles.splice(i, 1);
+          continue;
+        }
+        continue;
+      }
+
+      if (p.type === 'homing') {
+        if (p.energyRing) {
+          p.energyRing.rotation.x += delta * 6.0;
+          p.energyRing.rotation.y += delta * 8.0;
+        }
+
+        if (Math.random() < 0.6) {
+          const sparkGeo = new THREE.SphereGeometry(0.06, 6, 6);
+          const sparkMat = new THREE.MeshBasicMaterial({ color: p.color, transparent: true, opacity: 0.9 });
+          const sparkMesh = new THREE.Mesh(sparkGeo, sparkMat);
+          sparkMesh.position.copy(p.mesh.position);
+          scene.add(sparkMesh);
+          particles.push({
+            mesh: sparkMesh,
+            vel: new THREE.Vector3((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5),
+            life: 0.2,
+            maxLife: 0.2
+          });
+        }
+
+        let nearestTarget = activeBoss ? activeBoss.mesh.position : null;
+        let minDist = nearestTarget ? p.mesh.position.distanceTo(nearestTarget) : 999;
+
+        normalEnemies.forEach(e => {
+          const d = p.mesh.position.distanceTo(e.mesh.position);
+          if (d < minDist) {
+            minDist = d;
+            nearestTarget = e.mesh.position;
+          }
+        });
+
+        if (nearestTarget) {
+          const toTarget = new THREE.Vector3().subVectors(nearestTarget, p.mesh.position).normalize();
+          p.dir.lerp(toTarget, delta * 6.0).normalize();
+        }
+      } else if (p.type === 'hostile_tracking') {
+        const toPlayer = new THREE.Vector3().subVectors(playerGroup.position, p.mesh.position).normalize();
+        p.dir.lerp(toPlayer, delta * 2.0).normalize();
+      }
+
+      if (p.type === 'cone_shockwave') {
+        p.radius += 12.0 * delta;
+        if (p.waveMesh) p.waveMesh.scale.set(p.radius, p.radius, 1);
+        if (p.shards) {
+          p.shards.forEach((s) => {
+            s.scale.set(1 + p.radius * 0.2, 1 + p.radius * 0.5, 1 + p.radius * 0.2);
+          });
+        }
+        if (activeBoss && activeBoss.mesh.position.distanceTo(playerGroup.position) < p.radius) {
+          damageBoss(p.damage * delta);
+        }
+        normalEnemies.forEach((e, idx) => {
+          if (e.mesh.position.distanceTo(playerGroup.position) < p.radius) {
+            damageMinion(e, idx, p.damage * delta);
+          }
+        });
+      } else if (p.type !== 'astral_meteor') {
+        p.mesh.position.addScaledVector(p.dir, p.speed * delta);
+      }
+
+      p.life -= delta;
+
+      if (p.type === 'hostile' || p.type === 'hostile_tracking') {
+        if (p.mesh.position.distanceTo(playerGroup.position) < (p.radius + 0.8)) {
+          damagePlayer(p.damage);
+          scene.remove(p.mesh);
+          projectiles.splice(i, 1);
+          continue;
+        }
+      } else if (p.type !== 'astral_meteor') {
+        if (activeBoss && p.mesh.position.distanceTo(activeBoss.mesh.position) < (p.radius + 2.0)) {
+          damageBoss(p.damage);
+          spawnExplosionParticles(p.mesh.position, p.color, 25, 16);
+          scene.remove(p.mesh);
+          projectiles.splice(i, 1);
+          continue;
+        }
+
+        let hitMinion = false;
+        for (let j = normalEnemies.length - 1; j >= 0; j--) {
+          if (p.mesh.position.distanceTo(normalEnemies[j].mesh.position) < (p.radius + 0.8)) {
+            damageMinion(normalEnemies[j], j, p.damage);
+            spawnExplosionParticles(p.mesh.position, p.color, 20, 14);
+            scene.remove(p.mesh);
+            projectiles.splice(i, 1);
+            hitMinion = true;
+            break;
+          }
+        }
+        if (hitMinion) continue;
+      }
+
+      if (p.life <= 0 || p.mesh.position.length() > 28) {
+        scene.remove(p.mesh);
+        projectiles.splice(i, 1);
+      }
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const pt = particles[i];
+
+      if (pt.type === 'feather_storm') {
+        pt.mesh.position.addScaledVector(pt.vel, delta);
+        pt.mesh.rotation.y += delta * 5.0;
+        pt.mesh.rotation.z += delta * 3.0;
+      } else if (pt.type === 'fade_ring') {
+        pt.mesh.scale.multiplyScalar(1 + delta * 3.0);
+        if (pt.mesh.material) {
+          pt.mesh.material.opacity = Math.max(0, pt.life / 1.8);
+        }
+      } else {
+        pt.mesh.position.addScaledVector(pt.vel, delta);
+        pt.vel.y -= 9.8 * delta;
+        pt.mesh.scale.multiplyScalar(0.96);
+      }
+
+      if (pt.maxLife && pt.mesh.material && pt.mesh.material.opacity !== undefined) {
+        pt.mesh.material.opacity = Math.max(0, pt.life / pt.maxLife);
+      }
+
+      pt.life -= delta;
+
+      if (pt.life <= 0) {
+        scene.remove(pt.mesh);
+        particles.splice(i, 1);
+      }
+    }
+  }
+
+  composer.render();
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+}
+
+initGraphics();
 updateProfileUI();
-requestAnimationFrame(loop);
+animate();
 </script>
 </body>
 </html>
