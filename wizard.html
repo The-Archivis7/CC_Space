@@ -254,6 +254,41 @@
     border: 1px solid rgba(255,255,255,0.08);
     pointer-events: none;
   }
+
+  /* STAGE CLEAR UPGRADE SYSTEM UI */
+  .upgrade-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    width: 820px;
+    max-width: 92vw;
+    margin-top: 15px;
+  }
+
+  .upgrade-card {
+    background: rgba(15, 15, 28, 0.95);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    border-radius: 14px;
+    padding: 22px 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  }
+
+  .upgrade-card:hover {
+    transform: translateY(-6px);
+    border-color: #c084fc;
+    box-shadow: 0 12px 35px rgba(168, 85, 247, 0.45);
+    background: rgba(28, 20, 50, 0.95);
+  }
+
+  .upgrade-icon { font-size: 40px; margin-bottom: 12px; }
+  .upgrade-title { font-size: 16px; font-weight: 800; color: #f4f4f5; margin-bottom: 8px; }
+  .upgrade-desc { font-size: 12px; color: #a1a1aa; line-height: 1.45; }
 </style>
 
 <script type="importmap">
@@ -298,6 +333,13 @@
 
     <button class="btn-primary" onclick="startGame()">ENTER SANCTUARY</button>
   </div>
+</div>
+
+<!-- STAGE CLEAR UPGRADE SELECTION MENU -->
+<div id="upgrade-menu" class="overlay hidden">
+  <h1 class="title">Select Augmentation</h1>
+  <p class="subtitle">Empower Your Arcane Essence for this Run</p>
+  <div class="upgrade-grid" id="upgrade-options"></div>
 </div>
 
 <div id="clear-menu" class="overlay hidden">
@@ -366,22 +408,71 @@ let particles = [];
 let obelisks = [];
 let ambientLight, mainLight, rimLight;
 
-const BASE_SPELLS = [
-  { id: 'arcane', name: 'Seeker Orbs', key: '1', icon: '🔮', unlockLvl: 1, color: 0x38bdf8, emissive: 0x0284c7, radius: 0.4, speed: 28, damage: 6, cd: 0.5, cdTimer: 0, type: 'homing' },
-  { id: 'fireball', name: 'Inferno Nova', key: '2', icon: '🔥', unlockLvl: 2, color: 0xf97316, emissive: 0xe11d48, radius: 0.8, speed: 22, damage: 20, cd: 2.2, cdTimer: 0, type: 'fireball' },
-  { id: 'lightning', name: 'Chain Volt', key: '3', icon: '⚡', unlockLvl: 3, color: 0xfacc15, emissive: 0xca8a04, radius: 0.1, speed: 120, damage: 12, cd: 1.5, cdTimer: 0, type: 'hitscan_beam' },
-  { id: 'frost', name: 'Frost Wave', key: '4', icon: '❄️', unlockLvl: 4, color: 0x38edf8, emissive: 0x0284c7, radius: 0.5, speed: 18, damage: 11, cd: 3.0, cdTimer: 0, type: 'cone_shockwave' },
-  { id: 'void', name: 'Void Singular', key: '5', icon: '🌌', unlockLvl: 5, color: 0xa855f7, emissive: 0x6b21a8, radius: 1.2, speed: 12, damage: 22, cd: 4.5, cdTimer: 0, type: 'gravity_vortex' }
+// RUN-PERSISTED UPGRADE STATS
+let runStats = {
+  maxHpBonus: 0,
+  damageMult: 1.0,
+  cdMult: 1.0,
+  critChance: 0.0,
+  critDamage: 1.5,
+  extraProjectiles: 0,
+  spellEchoChance: 0.0,
+  damageReduction: 0.0,
+  dashCdMult: 1.0,
+  fireMult: 1.0,
+  frostMult: 1.0,
+  voidMult: 1.0,
+  lightningMult: 1.0,
+  arcaneMult: 1.0,
+  areaMult: 1.0,
+  lifeSteal: 0.0,
+  hpRegen: 0.0,
+  moveSpeedMult: 1.0
+};
+
+// COMPREHENSIVE RUN UPGRADES POOL (~20 UPGRADES)
+const UPGRADES_POOL = [
+  { id: 'hp', name: '+25 Max HP', icon: '❤️', desc: 'Increases maximum Barrier HP by 25 and heals 25 HP immediately.', apply: () => { runStats.maxHpBonus += 25; maxPlayerHp += 25; playerHp = Math.min(maxPlayerHp, playerHp + 25); updatePlayerHealthBar(); } },
+  { id: 'dmg', name: '+10% Spell Damage', icon: '⚔️', desc: 'Increases damage dealt by all spells by 10%.', apply: () => { runStats.damageMult += 0.10; } },
+  { id: 'cast_speed', name: '+10% Cast Speed', icon: '⚡', desc: 'Reduces spell cooldowns by 10%.', apply: () => { runStats.cdMult *= 0.90; } },
+  { id: 'crit_chance', name: '+15% Critical Chance', icon: '🎯', desc: 'Grants a 15% chance for spells to deal critical damage.', apply: () => { runStats.critChance += 0.15; } },
+  { id: 'crit_dmg', name: '+50% Critical Damage', icon: '💥', desc: 'Increases critical strike damage bonus by 50%.', apply: () => { runStats.critDamage += 0.50; } },
+  { id: 'extra_proj', name: 'Extra Projectile', icon: '🔮', desc: 'Fires an extra projectile with multi-shot spells.', apply: () => { runStats.extraProjectiles += 1; } },
+  { id: 'spell_echo', name: 'Spell Echo', icon: '🌀', desc: '20% chance for spells to automatically cast a second time.', apply: () => { runStats.spellEchoChance += 0.20; } },
+  { id: 'mana_shield', name: 'Mana Shield', icon: '🛡️', desc: 'Reduces all incoming damage taken by 15%.', apply: () => { runStats.damageReduction += 0.15; } },
+  { id: 'dash_cd', name: 'Faster Dash Recharge', icon: '💨', desc: 'Reduces dash cooldown by 30%.', apply: () => { runStats.dashCdMult *= 0.70; } },
+  { id: 'frost_boost', name: 'Frost Damage Boost', icon: '❄️', desc: 'Increases Frost damage by 25%.', apply: () => { runStats.frostMult += 0.25; } },
+  { id: 'fire_boost', name: 'Fire Damage Boost', icon: '🔥', desc: 'Increases Fire damage by 25%.', apply: () => { runStats.fireMult += 0.25; } },
+  { id: 'void_boost', name: 'Void Damage Boost', icon: '🌌', desc: 'Increases Void damage by 25%.', apply: () => { runStats.voidMult += 0.25; } },
+  { id: 'lightning_boost', name: 'Lightning Boost', icon: '⚡', desc: 'Increases Lightning damage by 25%.', apply: () => { runStats.lightningMult += 0.25; } },
+  { id: 'area_boost', name: 'Larger Explosion Radius', icon: '💣', desc: 'Increases explosion and area effect radius by 25%.', apply: () => { runStats.areaMult += 0.25; } },
+  { id: 'lifesteal', name: 'Life Steal', icon: '🩸', desc: 'Converts 5% of spell damage dealt into barrier health.', apply: () => { runStats.lifeSteal += 0.05; } },
+  { id: 'barrier_regen', name: 'Barrier Regeneration', icon: '✨', desc: 'Regenerates 2 Barrier HP per second continuously.', apply: () => { runStats.hpRegen += 2.0; } },
+  { id: 'move_speed', name: 'Fleet Footwork', icon: '👟', desc: 'Increases movement speed by 15%.', apply: () => { runStats.moveSpeedMult += 0.15; } },
+  { id: 'arcane_mastery', name: 'Arcane Mastery', icon: '📜', desc: 'Increases overall spell damage by 15% and cast speed by 5%.', apply: () => { runStats.damageMult += 0.15; runStats.cdMult *= 0.95; } },
+  { id: 'vampirism', name: 'Vampiric Touch', icon: '🧛', desc: 'Converts 8% of spell damage dealt into barrier health.', apply: () => { runStats.lifeSteal += 0.08; } },
+  { id: 'overcharge', name: 'Overcharge', icon: '⚡', desc: 'Increases spell damage by 20% but increases cooldowns by 5%.', apply: () => { runStats.damageMult += 0.20; runStats.cdMult *= 1.05; } }
 ];
 
-// Buffed Feather Storm Spell test
-const CORVID_SPELL = { id: 'feather_storm', name: 'Feather Storm', key: '6', icon: '🪶', unlockLvl: 1, color: 0xa855f7, emissive: 0xf97316, radius: 24.0, speed: 0, damage: 160, cd: 2.5, cdTimer: 0, type: 'feather_cleave' };
+const BASE_SPELLS = [
+  { id: 'arcane', name: 'Seeker Orbs', key: '1', icon: '🔮', unlockLvl: 1, color: 0x38bdf8, emissive: 0x0284c7, radius: 0.4, speed: 28, damage: 6, cd: 0.5, cdTimer: 0, type: 'homing', element: 'arcane' },
+  { id: 'fireball', name: 'Inferno Nova', key: '2', icon: '🔥', unlockLvl: 2, color: 0xf97316, emissive: 0xe11d48, radius: 0.8, speed: 22, damage: 20, cd: 2.2, cdTimer: 0, type: 'fireball', element: 'fire' },
+  { id: 'lightning', name: 'Chain Volt', key: '3', icon: '⚡', unlockLvl: 3, color: 0xfacc15, emissive: 0xca8a04, radius: 0.1, speed: 120, damage: 12, cd: 1.5, cdTimer: 0, type: 'hitscan_beam', element: 'lightning' },
+  { id: 'frost', name: 'Frost Wave', key: '4', icon: '❄️', unlockLvl: 4, color: 0x38edf8, emissive: 0x0284c7, radius: 0.5, speed: 18, damage: 11, cd: 3.0, cdTimer: 0, type: 'cone_shockwave', element: 'frost' },
+  { id: 'void', name: 'Void Singular', key: '5', icon: '🌌', unlockLvl: 5, color: 0xa855f7, emissive: 0x6b21a8, radius: 1.2, speed: 12, damage: 22, cd: 4.5, cdTimer: 0, type: 'gravity_vortex', element: 'void' },
+  
+  // NEW SPELLS INTEGRATED INTO SPELL BAR
+  { id: 'meteor', name: 'Meteor Call', key: '6', icon: '☄️', unlockLvl: 1, color: 0xef4444, emissive: 0xb91c1c, radius: 2.8, speed: 32, damage: 42, cd: 3.5, cdTimer: 0, type: 'meteor', element: 'fire' },
+  { id: 'barrage', name: 'Arcane Barrage', key: '7', icon: '✨', unlockLvl: 2, color: 0x38bdf8, emissive: 0x0284c7, radius: 0.35, speed: 35, damage: 7, cd: 1.6, cdTimer: 0, type: 'barrage', element: 'arcane' },
+  { id: 'solar_lance', name: 'Solar Lance', key: '8', icon: '☀️', unlockLvl: 3, color: 0xfacc15, emissive: 0xeab308, radius: 1.2, speed: 50, damage: 32, cd: 2.5, cdTimer: 0, type: 'solar_lance', element: 'fire' },
+  { id: 'thunderstorm', name: 'Thunderstorm', key: '9', icon: '🌩️', unlockLvl: 4, color: 0xa855f7, emissive: 0x7e22ce, radius: 4.5, speed: 0, damage: 48, cd: 4.8, cdTimer: 0, type: 'thunderstorm', element: 'lightning' }
+];
 
-const NUKE_SPELL = { id: 'cc_nuke', name: 'CC Nuke', key: '6', icon: '☢️', unlockLvl: 1, color: 0x22c55e, emissive: 0x15803d, radius: 22.0, speed: 0, damage: 300, cd: 6.0, cdTimer: 0, type: 'cc_nuke' };
-
-// Special Spells for archivis7
-const TANVON_BEAM = { id: 'tanvon_beam', name: "Tanvon's Beam", key: '6', icon: '🌑', unlockLvl: 1, color: 0x3b0764, emissive: 0xc084fc, radius: 2.2, speed: 0, damage: 220, cd: 1.0, cdTimer: 0, type: 'dark_beam' };
-const ASTRAL_STORM = { id: 'astral_storm', name: 'Astral Storm', key: '7', icon: '☄️', unlockLvl: 1, color: 0x22c55e, emissive: 0xa855f7, radius: 20.0, speed: 0, damage: 320, cd: 2.0, cdTimer: 0, type: 'astral_storm' };
+// Special Spells
+const CORVID_SPELL = { id: 'feather_storm', name: 'Feather Storm', key: '0', icon: '🪶', unlockLvl: 1, color: 0xa855f7, emissive: 0xf97316, radius: 24.0, speed: 0, damage: 160, cd: 2.5, cdTimer: 0, type: 'feather_cleave', element: 'void' };
+const NUKE_SPELL = { id: 'cc_nuke', name: 'CC Nuke', key: '0', icon: '☢️', unlockLvl: 1, color: 0x22c55e, emissive: 0x15803d, radius: 22.0, speed: 0, damage: 300, cd: 6.0, cdTimer: 0, type: 'cc_nuke', element: 'arcane' };
+const TANVON_BEAM = { id: 'tanvon_beam', name: "Tanvon's Beam", key: '0', icon: '🌑', unlockLvl: 1, color: 0x3b0764, emissive: 0xc084fc, radius: 2.2, speed: 0, damage: 220, cd: 1.0, cdTimer: 0, type: 'dark_beam', element: 'void' };
+const ASTRAL_STORM = { id: 'astral_storm', name: 'Astral Storm', key: '-', icon: '☄️', unlockLvl: 1, color: 0x22c55e, emissive: 0xa855f7, radius: 20.0, speed: 0, damage: 320, cd: 2.0, cdTimer: 0, type: 'astral_storm', element: 'void' };
 
 let SPELL_BOOK = [...BASE_SPELLS];
 
@@ -396,6 +487,31 @@ function getCosmetics(user) {
   if (user === 'AJTech') return { hatName: 'Blue Bowler Hat', type: 'bowler', hatColor: 0x2563eb };
   if (user === 'someone') return { hatName: 'Green Hat & White Feather', type: 'green_hat', hatColor: 0x16a34a, featherColor: 0xf8fafc };
   return { hatName: 'Standard Hood', type: 'hood' };
+}
+
+function resetRunStats() {
+  runStats = {
+    maxHpBonus: 0,
+    damageMult: 1.0,
+    cdMult: 1.0,
+    critChance: 0.0,
+    critDamage: 1.5,
+    extraProjectiles: 0,
+    spellEchoChance: 0.0,
+    damageReduction: 0.0,
+    dashCdMult: 1.0,
+    fireMult: 1.0,
+    frostMult: 1.0,
+    voidMult: 1.0,
+    lightningMult: 1.0,
+    arcaneMult: 1.0,
+    areaMult: 1.0,
+    lifeSteal: 0.0,
+    hpRegen: 0.0,
+    moveSpeedMult: 1.0
+  };
+  maxPlayerHp = 100;
+  playerHp = 100;
 }
 
 function initGraphics() {
@@ -768,7 +884,8 @@ function buildSpellBarUI() {
 }
 
 function handleHotkeys(e) {
-  const keyIdx = parseInt(e.key) - 1;
+  const keyMap = { 'Digit1': 0, 'Digit2': 1, 'Digit3': 2, 'Digit4': 3, 'Digit5': 4, 'Digit6': 5, 'Digit7': 6, 'Digit8': 7, 'Digit9': 8, 'Digit0': 9, 'Minus': 10 };
+  const keyIdx = keyMap[e.code] !== undefined ? keyMap[e.code] : parseInt(e.key) - 1;
   if (!isNaN(keyIdx) && keyIdx >= 0 && keyIdx < SPELL_BOOK.length) {
     const spell = SPELL_BOOK[keyIdx];
     const isUnlocked = (activeUser === 'archivis7') || (currentLevel >= spell.unlockLvl) || (spell.id === 'feather_storm') || (spell.id === 'cc_nuke');
@@ -783,7 +900,7 @@ function handleHotkeys(e) {
 }
 
 function performDash() {
-  dashCooldown = 1.0;
+  dashCooldown = 1.0 * runStats.dashCdMult;
   const dashDir = playerVelocity.lengthSq() > 0 ? playerVelocity.clone().normalize() : new THREE.Vector3(0, 0, -1);
   playerGroup.position.addScaledVector(dashDir, 5.0);
   spawnExplosionParticles(playerGroup.position, 0x38bdf8, 25, 16);
@@ -792,6 +909,7 @@ function performDash() {
 window.startGame = function() {
   activeUser = document.getElementById('username-input').value.trim() || 'Caster';
   document.getElementById('start-menu').classList.add('hidden');
+  resetRunStats();
   currentLevel = 1;
   activeSpellIndex = 0;
   isPlaying = true;
@@ -811,6 +929,7 @@ window.nextLevel = function() {
 
 window.retryLevel = function() {
   document.getElementById('game-over-menu').classList.add('hidden');
+  resetRunStats();
   isPlaying = true;
   initLevel(currentLevel);
 };
@@ -819,10 +938,46 @@ window.showMenu = function() {
   isPlaying = false;
   document.getElementById('start-menu').classList.remove('hidden');
   document.getElementById('clear-menu').classList.add('hidden');
+  document.getElementById('upgrade-menu').classList.add('hidden');
   document.getElementById('game-over-menu').classList.add('hidden');
   document.getElementById('boss-bar-container').classList.add('hidden');
   document.getElementById('minion-status').classList.add('hidden');
 };
+
+// UPGRADE SELECTION TRIGGER
+function triggerStageClearUI(subtitleMessage) {
+  isPlaying = false;
+  
+  // Pick 3 random distinct upgrades
+  const available = [...UPGRADES_POOL];
+  const selected = [];
+  while (selected.length < 3 && available.length > 0) {
+    const idx = Math.floor(Math.random() * available.length);
+    selected.push(available.splice(idx, 1)[0]);
+  }
+
+  const grid = document.getElementById('upgrade-options');
+  grid.innerHTML = '';
+
+  selected.forEach(upg => {
+    const card = document.createElement('div');
+    card.className = 'upgrade-card';
+    card.innerHTML = `
+      <div class="upgrade-icon">${upg.icon}</div>
+      <div class="upgrade-title">${upg.name}</div>
+      <div class="upgrade-desc">${upg.desc}</div>
+    `;
+    card.onclick = () => {
+      upg.apply();
+      document.getElementById('upgrade-menu').classList.add('hidden');
+      document.getElementById('clear-sub').innerText = subtitleMessage;
+      document.getElementById('clear-menu').classList.remove('hidden');
+    };
+    grid.appendChild(card);
+  });
+
+  document.getElementById('upgrade-menu').classList.remove('hidden');
+}
 
 function initLevel(lvl) {
   const realm = REALMS[(lvl - 1) % REALMS.length];
@@ -984,7 +1139,8 @@ function updatePlayerHealthBar() {
 
 function damagePlayer(amount) {
   if (invulnerableTimer > 0) return;
-  playerHp -= amount;
+  const netDamage = amount * (1.0 - runStats.damageReduction);
+  playerHp -= netDamage;
   invulnerableTimer = 0.8;
   updatePlayerHealthBar();
 
@@ -994,6 +1150,28 @@ function damagePlayer(amount) {
     isPlaying = false;
     document.getElementById('game-over-menu').classList.remove('hidden');
   }
+}
+
+function applyDamageCalculation(baseDmg, element = 'arcane') {
+  let mult = runStats.damageMult;
+  if (element === 'fire') mult *= runStats.fireMult;
+  if (element === 'frost') mult *= runStats.frostMult;
+  if (element === 'void') mult *= runStats.voidMult;
+  if (element === 'lightning') mult *= runStats.lightningMult;
+  if (element === 'arcane') mult *= runStats.arcaneMult;
+
+  let finalDmg = baseDmg * mult;
+
+  if (Math.random() < runStats.critChance) {
+    finalDmg *= runStats.critDamage;
+  }
+
+  if (runStats.lifeSteal > 0 && playerHp < maxPlayerHp) {
+    playerHp = Math.min(maxPlayerHp, playerHp + finalDmg * runStats.lifeSteal);
+    updatePlayerHealthBar();
+  }
+
+  return finalDmg;
 }
 
 function onCastSpell(event) {
@@ -1018,7 +1196,7 @@ function onCastSpell(event) {
   if (!targetPoint) return;
 
   if (activeUser !== 'archivis7') {
-    spellDef.cdTimer = spellDef.cd;
+    spellDef.cdTimer = spellDef.cd * runStats.cdMult;
   }
 
   const cos = getCosmetics(activeUser);
@@ -1026,39 +1204,56 @@ function onCastSpell(event) {
   const origin = staffOrbMesh.getWorldPosition(new THREE.Vector3());
   const dir = new THREE.Vector3().subVectors(targetPoint, origin).normalize();
 
-  // TANVON'S BEAM OF NIGHT
+  // OVERHAULED VISUALS: TANVON'S BEAM OF NIGHT
   if (spellDef.id === 'tanvon_beam') {
     const beamEnd = origin.clone().addScaledVector(dir, 40);
     const beamGroup = new THREE.Group();
 
-    // Outer Void Cylinder Beam
-    const beamGeo = new THREE.CylinderGeometry(0.8, 1.2, 40, 16);
+    // 1. High-Density Void Cylinder
+    const beamGeo = new THREE.CylinderGeometry(1.1, 1.6, 40, 24);
     const beamMat = new THREE.MeshStandardMaterial({
       color: 0x2e1065,
-      emissive: 0x3b0764,
-      emissiveIntensity: 3.5,
+      emissive: 0x581c87,
+      emissiveIntensity: 4.5,
       transparent: true,
-      opacity: 0.85
+      opacity: 0.88
     });
     const beamMesh = new THREE.Mesh(beamGeo, beamMat);
     beamMesh.position.copy(origin.clone().add(beamEnd).multiplyScalar(0.5));
     beamMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
     beamGroup.add(beamMesh);
 
-    // Inner Radiant Core Helix Line
-    const innerGeo = new THREE.CylinderGeometry(0.25, 0.35, 40, 16);
+    // 2. Blinding Arcane/Void Core
+    const innerGeo = new THREE.CylinderGeometry(0.35, 0.45, 40, 20);
     const innerMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      emissive: 0xc084fc,
-      emissiveIntensity: 6.0
+      emissive: 0xe9d5ff,
+      emissiveIntensity: 8.0
     });
     const innerMesh = new THREE.Mesh(innerGeo, innerMat);
     innerMesh.position.copy(beamMesh.position);
     innerMesh.quaternion.copy(beamMesh.quaternion);
     beamGroup.add(innerMesh);
 
-    // Ground Anomaly Ring
-    const ringGeo = new THREE.RingGeometry(0.5, 3.5, 32);
+    // 3. Dual Swirling Helix Tendrils along Beam
+    for (let h = 0; h < 2; h++) {
+      const helixGroup = new THREE.Group();
+      for (let s = 0; s < 12; s++) {
+        const ringGeo = new THREE.TorusGeometry(0.85, 0.06, 8, 16);
+        const ringMat = new THREE.MeshStandardMaterial({ color: 0xc084fc, emissive: 0xd946ef, emissiveIntensity: 5.0 });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.y = -18 + s * 3.2;
+        ring.rotation.x = Math.PI / 2;
+        ring.rotation.y = s * 0.5 + h * Math.PI;
+        helixGroup.add(ring);
+      }
+      helixGroup.position.copy(beamMesh.position);
+      helixGroup.quaternion.copy(beamMesh.quaternion);
+      beamGroup.add(helixGroup);
+    }
+
+    // 4. Concentric Impact Shockwaves
+    const ringGeo = new THREE.RingGeometry(0.6, 4.2, 36);
     const ringMat = new THREE.MeshBasicMaterial({ color: 0xc084fc, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
     const ringMesh = new THREE.Mesh(ringGeo, ringMat);
     ringMesh.rotation.x = Math.PI / 2;
@@ -1066,27 +1261,231 @@ function onCastSpell(event) {
     ringMesh.position.y = 0.08;
     beamGroup.add(ringMesh);
 
+    // 5. Impact Vertical Radiant Energy Pillar
+    const pillarGeo = new THREE.CylinderGeometry(1.8, 0.2, 12, 16);
+    const pillarMat = new THREE.MeshStandardMaterial({ color: 0xc084fc, emissive: 0xa855f7, emissiveIntensity: 6.0, transparent: true, opacity: 0.75 });
+    const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+    pillar.position.copy(targetPoint);
+    pillar.position.y = 6.0;
+    beamGroup.add(pillar);
+
+    // Dynamic Atmospheric Point Light
+    const bLight = new THREE.PointLight(0xc084fc, 18.0, 30);
+    bLight.position.copy(targetPoint);
+    beamGroup.add(bLight);
+
     scene.add(beamGroup);
 
-    spawnExplosionParticles(targetPoint, 0xc084fc, 45, 18);
-    spawnExplosionParticles(targetPoint, 0x3b0764, 30, 12);
+    spawnExplosionParticles(targetPoint, 0xc084fc, 55, 20);
+    spawnExplosionParticles(targetPoint, 0x3b0764, 40, 15);
 
+    const calcDmg = applyDamageCalculation(spellDef.damage * dmgMult, spellDef.element);
     if (activeBoss && raycaster.ray.distanceToPoint(activeBoss.mesh.position) < 3.8) {
-      damageBoss(spellDef.damage * dmgMult);
+      damageBoss(calcDmg);
     }
     for (let i = normalEnemies.length - 1; i >= 0; i--) {
       if (raycaster.ray.distanceToPoint(normalEnemies[i].mesh.position) < 2.5) {
-        damageMinion(normalEnemies[i], i, spellDef.damage * dmgMult);
+        damageMinion(normalEnemies[i], i, calcDmg);
       }
     }
 
     setTimeout(() => {
       scene.remove(beamGroup);
-    }, 180);
+    }, 200);
     return;
   }
 
-  // ASTRAL STORM (GREEN, PURPLE, ORANGE METEORS)
+  // NEW SPELL 1: METEOR CALL
+  if (spellDef.id === 'meteor') {
+    const dropStart = targetPoint.clone().add(new THREE.Vector3(6, 28, 6));
+    const meteorGroup = new THREE.Group();
+    
+    const geo = new THREE.SphereGeometry(1.4, 16, 16);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xf97316, emissiveIntensity: 4.0 });
+    const mMesh = new THREE.Mesh(geo, mat);
+    meteorGroup.add(mMesh);
+    
+    const auraGeo = new THREE.SphereGeometry(1.9, 12, 12);
+    const auraMat = new THREE.MeshBasicMaterial({ color: 0xb91c1c, transparent: true, opacity: 0.6, wireframe: true });
+    meteorGroup.add(new THREE.Mesh(auraGeo, auraMat));
+
+    meteorGroup.position.copy(dropStart);
+    scene.add(meteorGroup);
+
+    const mDir = new THREE.Vector3().subVectors(targetPoint, dropStart).normalize();
+    projectiles.push({
+      mesh: meteorGroup,
+      dir: mDir,
+      speed: 42,
+      damage: applyDamageCalculation(spellDef.damage * dmgMult, spellDef.element),
+      radius: spellDef.radius * runStats.areaMult,
+      color: 0xef4444,
+      type: 'meteor',
+      targetY: targetPoint.y,
+      targetPos: targetPoint.clone(),
+      life: 2.0
+    });
+    return;
+  }
+
+  // NEW SPELL 2: ARCANE BARRAGE
+  if (spellDef.id === 'barrage') {
+    for (let i = 0; i < 5; i++) {
+      setTimeout(() => {
+        if (!isPlaying) return;
+        const orig = staffOrbMesh.getWorldPosition(new THREE.Vector3());
+        const spreadDir = dir.clone().add(new THREE.Vector3((Math.random()-0.5)*0.18, 0, (Math.random()-0.5)*0.18)).normalize();
+        const bGroup = new THREE.Group();
+        const bGeo = new THREE.SphereGeometry(0.35, 12, 12);
+        const bMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 3.5 });
+        bGroup.add(new THREE.Mesh(bGeo, bMat));
+        bGroup.position.copy(orig);
+        scene.add(bGroup);
+
+        projectiles.push({
+          mesh: bGroup,
+          dir: spreadDir,
+          speed: 38,
+          damage: applyDamageCalculation(spellDef.damage * dmgMult, spellDef.element),
+          radius: spellDef.radius,
+          color: 0x38bdf8,
+          type: 'homing',
+          life: 2.5
+        });
+      }, i * 90);
+    }
+    return;
+  }
+
+  // NEW SPELL 3: SOLAR LANCE
+  if (spellDef.id === 'solar_lance') {
+    const lanceGroup = new THREE.Group();
+    const lGeo = new THREE.CylinderGeometry(0.12, 0.45, 4.5, 12);
+    const lMat = new THREE.MeshStandardMaterial({ color: 0xfff066, emissive: 0xfacc15, emissiveIntensity: 5.0 });
+    const lMesh = new THREE.Mesh(lGeo, lMat);
+    lMesh.rotation.x = Math.PI / 2;
+    lanceGroup.add(lMesh);
+
+    lanceGroup.position.copy(origin);
+    lanceGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+    scene.add(lanceGroup);
+
+    projectiles.push({
+      mesh: lanceGroup,
+      dir: dir,
+      speed: 55,
+      damage: applyDamageCalculation(spellDef.damage * dmgMult, spellDef.element),
+      radius: spellDef.radius,
+      color: 0xfacc15,
+      type: 'solar_lance',
+      life: 2.0
+    });
+    return;
+  }
+
+  // NEW SPELL 4: THUNDERSTORM (UPGRADED RENDERING)
+  if (spellDef.id === 'thunderstorm') {
+    const stormGroup = new THREE.Group();
+
+    // Layered Volumetric Cloud Cluster
+    const cloudMat = new THREE.MeshStandardMaterial({
+      color: 0x0a0a1a,
+      emissive: 0x3b0764,
+      emissiveIntensity: 0.9,
+      transparent: true,
+      opacity: 0.92,
+      roughness: 0.85
+    });
+
+    for (let c = 0; c < 6; c++) {
+      const pSize = 1.6 + Math.random() * 1.4;
+      const pGeo = new THREE.DodecahedronGeometry(pSize, 1);
+      const pMesh = new THREE.Mesh(pGeo, cloudMat);
+      pMesh.position.set(
+        (Math.random() - 0.5) * 3.8,
+        (Math.random() - 0.5) * 1.2,
+        (Math.random() - 0.5) * 3.8
+      );
+      stormGroup.add(pMesh);
+    }
+
+    // Dynamic Storm Core Flashing Light
+    const cloudLight = new THREE.PointLight(0xc084fc, 0, 18);
+    cloudLight.position.set(0, 0, 0);
+    stormGroup.add(cloudLight);
+
+    stormGroup.position.copy(targetPoint);
+    stormGroup.position.y = 8.5;
+    scene.add(stormGroup);
+
+    const stormRadius = spellDef.radius * runStats.areaMult;
+    for (let i = 0; i < 7; i++) {
+      setTimeout(() => {
+        if (!isPlaying) return;
+
+        // Flash storm cloud interior
+        cloudLight.intensity = 15.0;
+        setTimeout(() => { cloudLight.intensity = 0; }, 70);
+
+        const offset = new THREE.Vector3((Math.random() - 0.5) * stormRadius * 1.4, 0, (Math.random() - 0.5) * stormRadius * 1.4);
+        const strikePos = targetPoint.clone().add(offset);
+        const cloudPos = strikePos.clone(); cloudPos.y = 8.5;
+
+        // Primary Blinding Core Bolt
+        const corePoints = generateLightningPath(cloudPos, strikePos, 0.8);
+        const coreGeo = new THREE.BufferGeometry().setFromPoints(corePoints);
+        const coreMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 4 });
+        const boltCore = new THREE.Line(coreGeo, coreMat);
+
+        // Surrounding Glowing Plasma Shell
+        const shellPoints = generateLightningPath(cloudPos, strikePos, 1.8);
+        const shellGeo = new THREE.BufferGeometry().setFromPoints(shellPoints);
+        const shellMat = new THREE.LineBasicMaterial({ color: 0xa855f7, linewidth: 2 });
+        const boltShell = new THREE.Line(shellGeo, shellMat);
+
+        scene.add(boltCore);
+        scene.add(boltShell);
+
+        // Strike Flash & Ground Impact FX
+        const strikeLight = new THREE.PointLight(0xfacc15, 14.0, 15);
+        strikeLight.position.copy(strikePos).add(new THREE.Vector3(0, 0.5, 0));
+        scene.add(strikeLight);
+
+        const impactRingGeo = new THREE.RingGeometry(0.3, 2.5, 32);
+        const impactRingMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
+        const impactRing = new THREE.Mesh(impactRingGeo, impactRingMat);
+        impactRing.rotation.x = Math.PI / 2;
+        impactRing.position.copy(strikePos);
+        impactRing.position.y = 0.05;
+        scene.add(impactRing);
+
+        spawnExplosionParticles(strikePos, 0xfacc15, 28, 16);
+        spawnExplosionParticles(strikePos, 0xa855f7, 20, 12);
+
+        const dmg = applyDamageCalculation((spellDef.damage / 3) * dmgMult, spellDef.element);
+        if (activeBoss && strikePos.distanceTo(activeBoss.mesh.position) < 2.5) {
+          damageBoss(dmg);
+        }
+        for (let j = normalEnemies.length - 1; j >= 0; j--) {
+          if (strikePos.distanceTo(normalEnemies[j].mesh.position) < 2.0) {
+            damageMinion(normalEnemies[j], j, dmg);
+          }
+        }
+
+        setTimeout(() => {
+          scene.remove(boltCore);
+          scene.remove(boltShell);
+          scene.remove(strikeLight);
+          scene.remove(impactRing);
+        }, 110);
+      }, i * 250);
+    }
+
+    setTimeout(() => scene.remove(stormGroup), 2400);
+    return;
+  }
+
+  // ASTRAL STORM
   if (spellDef.id === 'astral_storm') {
     const meteorColors = [0x22c55e, 0xa855f7, 0xf97316];
     
@@ -1118,7 +1517,7 @@ function onCastSpell(event) {
           mesh: meteor,
           dir: mDir,
           speed: 38 + Math.random() * 12,
-          damage: (spellDef.damage / 4) * dmgMult,
+          damage: applyDamageCalculation((spellDef.damage / 4) * dmgMult, spellDef.element),
           radius: 1.8,
           color: color,
           type: 'astral_meteor',
@@ -1178,8 +1577,8 @@ function onCastSpell(event) {
       light: fLight,
       dir: dir,
       speed: spellDef.speed,
-      damage: spellDef.damage * dmgMult,
-      radius: spellDef.radius,
+      damage: applyDamageCalculation(spellDef.damage * dmgMult, spellDef.element),
+      radius: spellDef.radius * runStats.areaMult,
       color: spellDef.color,
       type: 'fireball',
       life: 3.0
@@ -1239,6 +1638,8 @@ function onCastSpell(event) {
     spawnExplosionParticles(targetPoint, 0x22c55e, 150, 20);
     spawnExplosionParticles(targetPoint, 0xfacc15, 80, 24);
 
+    const calcDmg = applyDamageCalculation(spellDef.damage * dmgMult, spellDef.element);
+
     projectiles.push({
       mesh: nukeGroup,
       nukeSphere: nukeSphere,
@@ -1247,20 +1648,20 @@ function onCastSpell(event) {
       torusMesh: blastTorus,
       light: flashLight,
       type: 'cc_nuke_blast',
-      damage: spellDef.damage * dmgMult,
+      damage: calcDmg,
       radius: 0.1,
-      maxRadius: 22.0,
+      maxRadius: 22.0 * runStats.areaMult,
       life: 0.9
     });
 
     if (activeBoss) {
-      if (activeBoss.mesh.position.distanceTo(targetPoint) < 22.0) {
-        damageBoss(spellDef.damage * dmgMult);
+      if (activeBoss.mesh.position.distanceTo(targetPoint) < 22.0 * runStats.areaMult) {
+        damageBoss(calcDmg);
       }
     }
     for (let i = normalEnemies.length - 1; i >= 0; i--) {
-      if (normalEnemies[i].mesh.position.distanceTo(targetPoint) < 22.0) {
-        damageMinion(normalEnemies[i], i, spellDef.damage * dmgMult);
+      if (normalEnemies[i].mesh.position.distanceTo(targetPoint) < 22.0 * runStats.areaMult) {
+        damageMinion(normalEnemies[i], i, calcDmg);
       }
     }
     return;
@@ -1313,60 +1714,91 @@ function onCastSpell(event) {
       });
     }
 
-    if (activeBoss) damageBoss(spellDef.damage * dmgMult);
-    normalEnemies.forEach((e, idx) => damageMinion(e, idx, spellDef.damage * dmgMult));
+    const calcDmg = applyDamageCalculation(spellDef.damage * dmgMult, spellDef.element);
+    if (activeBoss) damageBoss(calcDmg);
+    normalEnemies.forEach((e, idx) => damageMinion(e, idx, calcDmg));
     return;
   }
 
-  // CHAIN VOLT (LIGHTNING)
+  // CHAIN VOLT (LIGHTNING - UPGRADED RENDERING)
   if (spellDef.type === 'hitscan_beam') {
     const beamEnd = origin.clone().addScaledVector(dir, 35);
-    
-    const points = generateLightningPath(origin, beamEnd);
-    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
-    const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
-    const beamMesh = new THREE.Line(lineGeo, lineMat);
-    scene.add(beamMesh);
+    const beamGroup = new THREE.Group();
 
-    const branchPoints = generateLightningPath(origin, beamEnd, 1.8);
-    const branchGeo = new THREE.BufferGeometry().setFromPoints(branchPoints);
-    const branchMat = new THREE.LineBasicMaterial({ color: spellDef.color, linewidth: 2 });
-    const branchMesh = new THREE.Line(branchGeo, branchMat);
-    scene.add(branchMesh);
+    // Muzzle Discharge Flash
+    const muzzleLight = new THREE.PointLight(0xfacc15, 10.0, 10);
+    muzzleLight.position.copy(origin);
+    scene.add(muzzleLight);
+    spawnExplosionParticles(origin, 0xfacc15, 14, 10);
 
-    const flashGeo = new THREE.SphereGeometry(0.9, 16, 16);
-    const flashMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: spellDef.color, emissiveIntensity: 4.5 });
+    // Primary Pure White Intense Core Arc
+    const mainPoints = generateLightningPath(origin, beamEnd, 0.5);
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(mainPoints);
+    const coreMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 4 });
+    const coreLine = new THREE.Line(lineGeo, coreMat);
+    beamGroup.add(coreLine);
+
+    // Multi-Branch Erratic Outer Lightning Tendrils
+    for (let b = 0; b < 2; b++) {
+      const branchPoints = generateLightningPath(origin, beamEnd, 1.8 + b * 0.6);
+      const branchGeo = new THREE.BufferGeometry().setFromPoints(branchPoints);
+      const branchMat = new THREE.LineBasicMaterial({ color: spellDef.color, linewidth: 2 });
+      const branchLine = new THREE.Line(branchGeo, branchMat);
+      beamGroup.add(branchLine);
+    }
+
+    // Impact Energy Sphere Core
+    const flashGeo = new THREE.SphereGeometry(1.2, 16, 16);
+    const flashMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: spellDef.color, emissiveIntensity: 6.0 });
     const flashMesh = new THREE.Mesh(flashGeo, flashMat);
     flashMesh.position.copy(beamEnd);
-    scene.add(flashMesh);
+    beamGroup.add(flashMesh);
 
-    const ringGeo = new THREE.RingGeometry(0.2, 1.5, 24);
-    const ringMat = new THREE.MeshBasicMaterial({ color: spellDef.color, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
-    const impactRing = new THREE.Mesh(ringGeo, ringMat);
-    impactRing.rotation.x = Math.PI / 2;
-    impactRing.position.copy(beamEnd);
-    impactRing.position.y = 0.1;
-    scene.add(impactRing);
+    // Concentric Impact Shockwaves
+    const ringGeo1 = new THREE.RingGeometry(0.3, 2.2, 32);
+    const ringMat1 = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
+    const impactRing1 = new THREE.Mesh(ringGeo1, ringMat1);
+    impactRing1.rotation.x = Math.PI / 2;
+    impactRing1.position.copy(beamEnd);
+    impactRing1.position.y = 0.08;
+    beamGroup.add(impactRing1);
 
-    spawnExplosionParticles(beamEnd, spellDef.color, 30, 14);
+    const ringGeo2 = new THREE.RingGeometry(0.8, 3.6, 32);
+    const ringMat2 = new THREE.MeshBasicMaterial({ color: spellDef.color, side: THREE.DoubleSide, transparent: true, opacity: 0.75 });
+    const impactRing2 = new THREE.Mesh(ringGeo2, ringMat2);
+    impactRing2.rotation.x = Math.PI / 2;
+    impactRing2.position.copy(beamEnd);
+    impactRing2.position.y = 0.06;
+    beamGroup.add(impactRing2);
+
+    // Dynamic Impact Point Light Burst
+    const impactLight = new THREE.PointLight(spellDef.color, 15.0, 18);
+    impactLight.position.copy(beamEnd);
+    scene.add(impactLight);
+
+    scene.add(beamGroup);
+
+    spawnExplosionParticles(beamEnd, spellDef.color, 35, 18);
+    spawnExplosionParticles(beamEnd, 0xffffff, 20, 14);
+
+    const calcDmg = applyDamageCalculation(spellDef.damage * dmgMult, spellDef.element);
 
     if (activeBoss && raycaster.ray.distanceToPoint(activeBoss.mesh.position) < 3.0) {
-      damageBoss(spellDef.damage * dmgMult);
+      damageBoss(calcDmg);
       spawnExplosionParticles(activeBoss.mesh.position, spellDef.color, 16);
     }
 
     for (let i = normalEnemies.length - 1; i >= 0; i--) {
       if (raycaster.ray.distanceToPoint(normalEnemies[i].mesh.position) < 1.2) {
-        damageMinion(normalEnemies[i], i, spellDef.damage * dmgMult);
+        damageMinion(normalEnemies[i], i, calcDmg);
       }
     }
 
     setTimeout(() => {
-      scene.remove(beamMesh);
-      scene.remove(branchMesh);
-      scene.remove(flashMesh);
-      scene.remove(impactRing);
-    }, 100);
+      scene.remove(beamGroup);
+      scene.remove(muzzleLight);
+      scene.remove(impactLight);
+    }, 110);
 
   // FROST WAVE
   } else if (spellDef.type === 'cone_shockwave') {
@@ -1411,8 +1843,8 @@ function onCastSpell(event) {
       waveMesh: waveMesh,
       shards: shards,
       type: 'cone_shockwave',
-      damage: spellDef.damage * dmgMult,
-      radius: 1.0,
+      damage: applyDamageCalculation(spellDef.damage * dmgMult, spellDef.element),
+      radius: 1.0 * runStats.areaMult,
       color: spellDef.color,
       dir: dir,
       life: 0.65
@@ -1469,8 +1901,8 @@ function onCastSpell(event) {
       motes: motes,
       seal: seal,
       type: 'vortex',
-      damage: spellDef.damage * dmgMult,
-      radius: 6.0,
+      damage: applyDamageCalculation(spellDef.damage * dmgMult, spellDef.element),
+      radius: 6.0 * runStats.areaMult,
       life: 3.5,
       color: spellDef.color
     });
@@ -1500,7 +1932,7 @@ function onCastSpell(event) {
       energyRing: energyRing,
       dir: dir,
       speed: spellDef.speed,
-      damage: spellDef.damage * dmgMult,
+      damage: applyDamageCalculation(spellDef.damage * dmgMult, spellDef.element),
       radius: spellDef.radius,
       color: spellDef.color,
       type: spellDef.type,
@@ -1540,9 +1972,7 @@ function damageBoss(amt) {
     document.getElementById('boss-bar-container').classList.add('hidden');
 
     setTimeout(() => {
-      isPlaying = false;
-      document.getElementById('clear-sub').innerText = `Boss Level ${currentLevel} Banished! Metallic Core Destroyed.`;
-      document.getElementById('clear-menu').classList.remove('hidden');
+      triggerStageClearUI(`Boss Level ${currentLevel} Banished! Metallic Core Destroyed.`);
     }, 600);
   }
 }
@@ -1559,9 +1989,7 @@ function damageMinion(minion, index, amt) {
 
     if (normalEnemies.length === 0 && (currentLevel % 5 !== 0)) {
       setTimeout(() => {
-        isPlaying = false;
-        document.getElementById('clear-sub').innerText = `Stage ${currentLevel} Minion Wave Cleared!`;
-        document.getElementById('clear-menu').classList.remove('hidden');
+        triggerStageClearUI(`Stage ${currentLevel} Minion Wave Cleared!`);
       }, 400);
     }
   }
@@ -1696,7 +2124,7 @@ function updateNormalEnemies(delta) {
 function updatePlayerMovement(delta) {
   if (dashCooldown > 0) dashCooldown -= delta;
 
-  const moveSpeed = 11.0;
+  const moveSpeed = 11.0 * runStats.moveSpeedMult;
   playerVelocity.set(0, 0, 0);
 
   if (keyState['KeyW'] || keyState['ArrowUp']) playerVelocity.z -= 1;
@@ -1758,12 +2186,18 @@ function animate() {
 
   if (invulnerableTimer > 0) invulnerableTimer -= delta;
 
+  // Barrier Regeneration
+  if (isPlaying && runStats.hpRegen > 0 && playerHp < maxPlayerHp) {
+    playerHp = Math.min(maxPlayerHp, playerHp + runStats.hpRegen * delta);
+    updatePlayerHealthBar();
+  }
+
   SPELL_BOOK.forEach((spell, idx) => {
     if (spell.cdTimer > 0) {
       spell.cdTimer = Math.max(0, spell.cdTimer - delta);
       const overlay = document.getElementById(`cd-overlay-${idx}`);
       if (overlay) {
-        const pct = (spell.cdTimer / spell.cd) * 100;
+        const pct = (spell.cdTimer / (spell.cd * runStats.cdMult)) * 100;
         overlay.style.height = `${pct}%`;
       }
     }
@@ -1833,6 +2267,43 @@ function animate() {
 
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const p = projectiles[i];
+
+      if (p.type === 'meteor') {
+        p.mesh.position.addScaledVector(p.dir, p.speed * delta);
+        spawnExplosionParticles(p.mesh.position, 0xef4444, 2, 4);
+
+        if (p.mesh.position.y <= p.targetY) {
+          spawnExplosionParticles(p.targetPos, 0xef4444, 45, 18);
+          spawnExplosionParticles(p.targetPos, 0xf97316, 25, 12);
+          
+          if (activeBoss && p.targetPos.distanceTo(activeBoss.mesh.position) < p.radius + 1.5) {
+            damageBoss(p.damage);
+          }
+          for (let j = normalEnemies.length - 1; j >= 0; j--) {
+            if (p.targetPos.distanceTo(normalEnemies[j].mesh.position) < p.radius + 0.8) {
+              damageMinion(normalEnemies[j], j, p.damage);
+            }
+          }
+
+          scene.remove(p.mesh);
+          projectiles.splice(i, 1);
+          continue;
+        }
+      }
+
+      if (p.type === 'solar_lance') {
+        p.mesh.position.addScaledVector(p.dir, p.speed * delta);
+        spawnExplosionParticles(p.mesh.position, 0xfacc15, 2, 4);
+
+        if (activeBoss && p.mesh.position.distanceTo(activeBoss.mesh.position) < (p.radius + 1.5)) {
+          damageBoss(p.damage);
+        }
+        for (let j = normalEnemies.length - 1; j >= 0; j--) {
+          if (p.mesh.position.distanceTo(normalEnemies[j].mesh.position) < (p.radius + 0.8)) {
+            damageMinion(normalEnemies[j], j, p.damage);
+          }
+        }
+      }
 
       if (p.type === 'astral_meteor') {
         p.mesh.position.addScaledVector(p.dir, p.speed * delta);
@@ -1915,96 +2386,58 @@ function animate() {
       if (p.type === 'homing') {
         if (p.energyRing) {
           p.energyRing.rotation.x += delta * 6.0;
-          p.energyRing.rotation.y += delta * 8.0;
+          p.energyRing.rotation.y += delta * 4.0;
         }
 
-        if (Math.random() < 0.6) {
-          const sparkGeo = new THREE.SphereGeometry(0.06, 6, 6);
-          const sparkMat = new THREE.MeshBasicMaterial({ color: p.color, transparent: true, opacity: 0.9 });
-          const sparkMesh = new THREE.Mesh(sparkGeo, sparkMat);
-          sparkMesh.position.copy(p.mesh.position);
-          scene.add(sparkMesh);
-          particles.push({
-            mesh: sparkMesh,
-            vel: new THREE.Vector3((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5),
-            life: 0.2,
-            maxLife: 0.2
-          });
+        let nearest = null;
+        let minDist = 20;
+
+        if (activeBoss) {
+          const d = p.mesh.position.distanceTo(activeBoss.mesh.position);
+          if (d < minDist) { minDist = d; nearest = activeBoss.mesh; }
         }
-
-        let nearestTarget = activeBoss ? activeBoss.mesh.position : null;
-        let minDist = nearestTarget ? p.mesh.position.distanceTo(nearestTarget) : 999;
-
         normalEnemies.forEach(e => {
           const d = p.mesh.position.distanceTo(e.mesh.position);
-          if (d < minDist) {
-            minDist = d;
-            nearestTarget = e.mesh.position;
-          }
+          if (d < minDist) { minDist = d; nearest = e.mesh; }
         });
 
-        if (nearestTarget) {
-          const toTarget = new THREE.Vector3().subVectors(nearestTarget, p.mesh.position).normalize();
-          p.dir.lerp(toTarget, delta * 6.0).normalize();
+        if (nearest) {
+          const targetDir = new THREE.Vector3().subVectors(nearest.position, p.mesh.position).normalize();
+          p.dir.lerp(targetDir, delta * 6.0).normalize();
         }
-      } else if (p.type === 'hostile_tracking') {
-        const toPlayer = new THREE.Vector3().subVectors(playerGroup.position, p.mesh.position).normalize();
-        p.dir.lerp(toPlayer, delta * 2.0).normalize();
       }
 
-      if (p.type === 'cone_shockwave') {
-        p.radius += 12.0 * delta;
-        if (p.waveMesh) p.waveMesh.scale.set(p.radius, p.radius, 1);
-        if (p.shards) {
-          p.shards.forEach((s) => {
-            s.scale.set(1 + p.radius * 0.2, 1 + p.radius * 0.5, 1 + p.radius * 0.2);
-          });
-        }
-        if (activeBoss && activeBoss.mesh.position.distanceTo(playerGroup.position) < p.radius) {
-          damageBoss(p.damage * delta);
-        }
-        normalEnemies.forEach((e, idx) => {
-          if (e.mesh.position.distanceTo(playerGroup.position) < p.radius) {
-            damageMinion(e, idx, p.damage * delta);
-          }
-        });
-      } else if (p.type !== 'astral_meteor') {
-        p.mesh.position.addScaledVector(p.dir, p.speed * delta);
-      }
+      p.mesh.position.addScaledVector(p.dir, p.speed * delta);
+      p.life = (p.life || 3.0) - delta;
 
-      p.life -= delta;
-
+      let hit = false;
       if (p.type === 'hostile' || p.type === 'hostile_tracking') {
-        if (p.mesh.position.distanceTo(playerGroup.position) < (p.radius + 0.8)) {
-          damagePlayer(p.damage);
-          scene.remove(p.mesh);
-          projectiles.splice(i, 1);
-          continue;
-        }
-      } else if (p.type !== 'astral_meteor') {
-        if (activeBoss && p.mesh.position.distanceTo(activeBoss.mesh.position) < (p.radius + 2.0)) {
-          damageBoss(p.damage);
-          spawnExplosionParticles(p.mesh.position, p.color, 25, 16);
-          scene.remove(p.mesh);
-          projectiles.splice(i, 1);
-          continue;
+        if (p.type === 'hostile_tracking') {
+          const toPlayer = new THREE.Vector3().subVectors(playerGroup.position, p.mesh.position).normalize();
+          p.dir.lerp(toPlayer, delta * 2.5).normalize();
         }
 
-        let hitMinion = false;
+        if (p.mesh.position.distanceTo(playerGroup.position) < (p.radius + 0.6)) {
+          damagePlayer(p.damage);
+          hit = true;
+        }
+      } else {
+        if (activeBoss && p.mesh.position.distanceTo(activeBoss.mesh.position) < (p.radius + 2.2)) {
+          damageBoss(p.damage);
+          spawnExplosionParticles(p.mesh.position, p.color, 25, 15);
+          hit = true;
+        }
         for (let j = normalEnemies.length - 1; j >= 0; j--) {
-          if (p.mesh.position.distanceTo(normalEnemies[j].mesh.position) < (p.radius + 0.8)) {
+          if (p.mesh.position.distanceTo(normalEnemies[j].mesh.position) < (p.radius + 0.7)) {
             damageMinion(normalEnemies[j], j, p.damage);
-            spawnExplosionParticles(p.mesh.position, p.color, 20, 14);
-            scene.remove(p.mesh);
-            projectiles.splice(i, 1);
-            hitMinion = true;
+            spawnExplosionParticles(p.mesh.position, p.color, 15, 12);
+            hit = true;
             break;
           }
         }
-        if (hitMinion) continue;
       }
 
-      if (p.life <= 0 || p.mesh.position.length() > 28) {
+      if (hit || p.life <= 0 || p.mesh.position.length() > 30) {
         scene.remove(p.mesh);
         projectiles.splice(i, 1);
       }
@@ -2012,27 +2445,22 @@ function animate() {
 
     for (let i = particles.length - 1; i >= 0; i--) {
       const pt = particles[i];
+      pt.life -= delta;
 
       if (pt.type === 'feather_storm') {
         pt.mesh.position.addScaledVector(pt.vel, delta);
-        pt.mesh.rotation.y += delta * 5.0;
-        pt.mesh.rotation.z += delta * 3.0;
+        pt.mesh.rotation.x += delta * 12.0;
+        pt.mesh.rotation.y += delta * 8.0;
       } else if (pt.type === 'fade_ring') {
-        pt.mesh.scale.multiplyScalar(1 + delta * 3.0);
-        if (pt.mesh.material) {
-          pt.mesh.material.opacity = Math.max(0, pt.life / 1.8);
-        }
+        pt.mesh.scale.addScalar(delta * 1.5);
+        if (pt.mesh.material) pt.mesh.material.opacity = Math.max(0, pt.life / 1.8);
       } else {
         pt.mesh.position.addScaledVector(pt.vel, delta);
-        pt.vel.y -= 9.8 * delta;
-        pt.mesh.scale.multiplyScalar(0.96);
+        pt.vel.y -= 12.0 * delta;
+        if (pt.mesh.material) {
+          pt.mesh.material.opacity = Math.max(0, pt.life / (pt.maxLife || 0.8));
+        }
       }
-
-      if (pt.maxLife && pt.mesh.material && pt.mesh.material.opacity !== undefined) {
-        pt.mesh.material.opacity = Math.max(0, pt.life / pt.maxLife);
-      }
-
-      pt.life -= delta;
 
       if (pt.life <= 0) {
         scene.remove(pt.mesh);
