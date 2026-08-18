@@ -1,0 +1,1918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IRON MAW FORGE - Advanced Tactical Mech Warfare</title>
+    <style>
+        :root {
+            --bg-dark: #05070a;
+            --bg-panel: rgba(10, 14, 22, 0.94);
+            --border-panel: #1e293b;
+            --border-active: #ff5500;
+            --accent-orange: #ff5500;
+            --accent-yellow: #ffb700;
+            --accent-cyan: #00f0ff;
+            --accent-red: #ff2244;
+            --accent-green: #00ff66;
+            --accent-purple: #a855f7;
+            --text-main: #f1f5f9;
+            --text-dim: #64748b;
+            --font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-dark);
+            font-family: var(--font-family);
+            color: var(--text-main);
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        #ui-root {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .interactive { pointer-events: auto; }
+
+        header {
+            background: linear-gradient(180deg, rgba(5,7,10,0.98) 0%, rgba(5,7,10,0.7) 80%, rgba(5,7,10,0) 100%);
+            padding: 16px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,85,0,0.3);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 26px;
+            font-weight: 900;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+
+        .brand span {
+            color: var(--accent-orange);
+            text-shadow: 0 0 16px rgba(255,85,0,0.7);
+        }
+
+        nav {
+            display: flex;
+            gap: 6px;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 4px;
+            border-radius: 6px;
+            border: 1px solid var(--border-panel);
+        }
+
+        .nav-tab {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 10px 20px;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-radius: 4px;
+        }
+
+        .nav-tab:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.05);
+        }
+
+        .nav-tab.active {
+            color: #fff;
+            background: var(--accent-orange);
+            box-shadow: 0 0 18px rgba(255,85,0,0.6);
+        }
+
+        .resources-bar {
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+            font-weight: 800;
+            background: var(--bg-panel);
+            padding: 8px 18px;
+            border: 1px solid var(--border-panel);
+            border-radius: 4px;
+        }
+
+        .res-item { display: flex; align-items: center; gap: 6px; }
+        .res-credits { color: var(--accent-yellow); }
+        .res-rp { color: var(--accent-cyan); }
+        .res-tokens { color: var(--accent-orange); }
+
+        .panel {
+            position: absolute;
+            top: 85px;
+            bottom: 24px;
+            left: 24px;
+            width: 440px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-panel);
+            border-radius: 6px;
+            padding: 22px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.95);
+            overflow-y: auto;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        .panel.hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(15px);
+        }
+
+        .panel-header {
+            font-size: 15px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            border-bottom: 2px solid var(--accent-orange);
+            padding-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stat-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: rgba(0,0,0,0.4);
+            padding: 14px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .stat-item { display: flex; flex-direction: column; gap: 4px; }
+        .stat-labels { display: flex; justify-content: space-between; font-size: 11px; font-weight: 800; }
+        .stat-bar-track { height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+        .stat-bar-fill { height: 100%; background: var(--accent-orange); width: 50%; transition: width 0.3s ease; }
+
+        .category-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; border-bottom: 1px solid var(--border-panel); }
+        .cat-btn {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border-panel);
+            color: var(--text-dim);
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            cursor: pointer;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+        .cat-btn.active { background: var(--accent-orange); color: #fff; border-color: var(--accent-orange); }
+
+        .parts-grid { display: grid; grid-template-columns: repeat(1, 1fr); gap: 10px; max-height: 380px; overflow-y: auto; }
+        .part-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border-panel);
+            border-radius: 4px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .part-card:hover { border-color: var(--accent-orange); background: rgba(255,85,0,0.08); }
+        .part-card.equipped { border-color: var(--accent-orange); background: rgba(255,85,0,0.22); box-shadow: inset 0 0 12px rgba(255,85,0,0.4); }
+        .part-card.locked { opacity: 0.6; }
+
+        .part-title-row { display: flex; justify-content: space-between; align-items: center; }
+        .part-name { font-size: 13px; font-weight: 800; }
+        .part-status { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 2px; text-transform: uppercase; }
+        .status-equipped { background: var(--accent-orange); color: #fff; }
+        .status-unlocked { background: var(--accent-green); color: #000; }
+        .status-locked { background: rgba(255,255,255,0.2); color: #fff; }
+
+        .part-desc { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
+
+        .color-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+        .color-swatch {
+            height: 34px;
+            border-radius: 4px;
+            border: 2px solid rgba(255,255,255,0.2);
+            cursor: pointer;
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+        .color-swatch:hover { transform: scale(1.1); border-color: #fff; }
+        .color-swatch.active { border-color: var(--accent-orange); box-shadow: 0 0 12px rgba(255,85,0,0.9); }
+
+        .btn {
+            background: linear-gradient(135deg, var(--accent-orange) 0%, #d94100 100%);
+            border: none;
+            color: #fff;
+            padding: 12px 20px;
+            font-size: 13px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 4px 18px rgba(255,85,0,0.4);
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(255,85,0,0.7); }
+        .btn-secondary { background: rgba(255,255,255,0.08); border: 1px solid var(--border-panel); box-shadow: none; }
+        .btn-secondary:hover { background: rgba(255,255,255,0.18); border-color: #fff; }
+
+        #hud-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 24px;
+        }
+
+        .hud-card {
+            width: 340px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-panel);
+            padding: 16px;
+            border-radius: 6px;
+            backdrop-filter: blur(10px);
+        }
+
+        .hud-meter { margin-bottom: 8px; }
+        .hud-meter-header { display: flex; justify-content: space-between; font-size: 11px; font-weight: 800; margin-bottom: 4px; }
+        .hud-meter-bar { height: 8px; background: rgba(0,0,0,0.7); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
+        .hud-meter-fill { height: 100%; width: 100%; transition: width 0.1s ease-out; }
+
+        .fill-hp { background: linear-gradient(90deg, #ff2244, #ff5500); }
+        .fill-shield { background: linear-gradient(90deg, #0088ff, #00f0ff); }
+        .fill-heat { background: linear-gradient(90deg, #ffaa00, #ff0000); }
+
+        .reticle-container {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px; height: 60px;
+            pointer-events: none;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .reticle-circle {
+            width: 42px; height: 42px;
+            border: 2px solid rgba(0, 240, 255, 0.6);
+            border-radius: 50%;
+            position: absolute;
+            box-shadow: 0 0 10px rgba(0,240,255,0.3);
+        }
+        .reticle-dot { width: 6px; height: 6px; background: var(--accent-cyan); border-radius: 50%; box-shadow: 0 0 10px var(--accent-cyan); }
+
+        .dmg-text {
+            position: absolute;
+            font-weight: 900;
+            font-size: 24px;
+            color: #fff;
+            text-shadow: 0 0 6px #000, 0 0 12px rgba(255,85,0,0.9);
+            pointer-events: none;
+            animation: floatDamage 0.75s ease-out forwards;
+        }
+
+        #wave-indicator {
+            position: absolute;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(10, 14, 22, 0.85);
+            border: 1px solid var(--accent-orange);
+            color: #fff;
+            padding: 8px 24px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: 900;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            box-shadow: 0 0 15px rgba(255,85,0,0.4);
+            display: none;
+        }
+
+        @keyframes floatDamage {
+            0% { opacity: 1; transform: translateY(0) scale(0.8); }
+            50% { transform: translateY(-20px) scale(1.2); }
+            100% { opacity: 0; transform: translateY(-45px) scale(0.9); }
+        }
+
+        .modal-bg {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(5,7,12,0.92);
+            backdrop-filter: blur(16px);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 100;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .modal-bg.active { opacity: 1; pointer-events: auto; }
+        .modal-card {
+            background: var(--bg-panel);
+            border: 2px solid var(--border-panel);
+            border-radius: 8px;
+            padding: 40px;
+            width: 480px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 22px;
+            box-shadow: 0 0 80px rgba(0,0,0,0.95);
+        }
+        .modal-title { font-size: 32px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
+        .modal-title.victory { color: var(--accent-green); text-shadow: 0 0 25px rgba(0,255,102,0.7); }
+        .modal-title.defeat { color: var(--accent-red); text-shadow: 0 0 25px rgba(255,34,68,0.7); }
+
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-size: 11px; font-weight: 800; color: var(--text-dim); text-transform: uppercase; }
+        select, input[type="range"] {
+            width: 100%; background: rgba(0,0,0,0.6); border: 1px solid var(--border-panel); color: #fff; padding: 8px 12px; border-radius: 4px; outline: none; font-family: inherit;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-root">
+        <header class="interactive">
+            <div class="brand"><span>IRON MAW</span> FORGE</div>
+            <nav id="main-nav">
+                <button class="nav-tab active" onclick="switchTab('garage')">Loadout</button>
+                <button class="nav-tab" onclick="switchTab('customizer')">Livery Paint</button>
+                <button class="nav-tab" onclick="switchTab('ai-logic')">Tactical AI</button>
+                <button class="nav-tab" onclick="switchTab('research')">Tech Tree</button>
+                <button class="nav-tab" onclick="switchTab('arena')">Sortie Arena</button>
+            </nav>
+            <div class="resources-bar">
+                <div class="res-item res-credits">💳 <span id="res-credits-val">0</span> CR</div>
+                <div class="res-item res-rp">🧪 <span id="res-rp-val">100</span> RP</div>
+                <div class="res-item res-tokens">🪙 <span id="res-tokens-val">0</span> TK</div>
+            </div>
+        </header>
+
+        <!-- GARAGE / BUILDER PANEL -->
+        <div id="panel-garage" class="panel interactive">
+            <div class="panel-header">
+                Mech Architecture
+                <span style="font-size: 11px; color: var(--accent-orange);" id="mech-class-name">CUSTOM CHASSIS</span>
+            </div>
+
+            <div class="stat-list">
+                <div class="stat-item">
+                    <div class="stat-labels"><span>Hull Integrity (HP)</span><span id="stat-hp-val">2800</span></div>
+                    <div class="stat-bar-track"><div id="stat-hp-bar" class="stat-bar-fill"></div></div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-labels"><span>Shield Energy</span><span id="stat-shield-val">1000</span></div>
+                    <div class="stat-bar-track"><div id="stat-shield-bar" class="stat-bar-fill" style="background: var(--accent-cyan);"></div></div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-labels"><span>Power Plant Output</span><span id="stat-energy-val">160 MW</span></div>
+                    <div class="stat-bar-track"><div id="stat-energy-bar" class="stat-bar-fill" style="background: var(--accent-yellow);"></div></div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-labels"><span>Max Mobility</span><span id="stat-speed-val">55 km/h</span></div>
+                    <div class="stat-bar-track"><div id="stat-speed-bar" class="stat-bar-fill"></div></div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-labels"><span>Heat Dissipation</span><span id="stat-heat-val">45/s</span></div>
+                    <div class="stat-bar-track"><div id="stat-heat-bar" class="stat-bar-fill" style="background: var(--accent-red);"></div></div>
+                </div>
+            </div>
+
+            <div class="category-tabs" id="part-category-selector">
+                <button class="cat-btn active" onclick="selectPartCategory('head')">Head</button>
+                <button class="cat-btn" onclick="selectPartCategory('torso')">Torso</button>
+                <button class="cat-btn" onclick="selectPartCategory('arms')">Weapons</button>
+                <button class="cat-btn" onclick="selectPartCategory('legs')">Legs</button>
+                <button class="cat-btn" onclick="selectPartCategory('core')">Reactor</button>
+                <button class="cat-btn" onclick="selectPartCategory('armor')">Plating</button>
+            </div>
+
+            <div class="parts-grid" id="parts-list-grid"></div>
+        </div>
+
+        <!-- PAINT CUSTOMIZER PANEL -->
+        <div id="panel-customizer" class="panel hidden interactive">
+            <div class="panel-header">Industrial Coatings & Optics</div>
+
+            <div class="form-group">
+                <label>Primary Armor Coating</label>
+                <div class="color-grid" id="paint-primary-grid"></div>
+            </div>
+
+            <div class="form-group">
+                <label>Secondary Frame Trim</label>
+                <div class="color-grid" id="paint-secondary-grid"></div>
+            </div>
+
+            <div class="form-group">
+                <label>Reactor Glow & Optics Lens</label>
+                <div class="color-grid" id="paint-emissive-grid"></div>
+            </div>
+        </div>
+
+        <!-- AI ROUTINES PANEL -->
+        <div id="panel-ai-logic" class="panel hidden interactive">
+            <div class="panel-header">AI Tactical Matrix</div>
+            
+            <div class="form-group">
+                <label>Combat Paradigm</label>
+                <select id="ai-preset-select" onchange="updateAISettings()">
+                    <option value="aggressive">Aggressive Assault (Charge & Fire)</option>
+                    <option value="defensive">Defensive Anchor (Shield & Hold)</option>
+                    <option value="sniper">Tactical Kiter (Maintain Distance)</option>
+                    <option value="berserker">Close-Quarters Berserker</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Engagement Distance: <span id="ai-range-lbl">40m</span></label>
+                <input type="range" id="ai-range-input" min="10" max="90" value="40" oninput="updateAISettings()">
+            </div>
+
+            <div class="form-group">
+                <label>Retreat Health Threshold: <span id="ai-retreat-lbl">20%</span></label>
+                <input type="range" id="ai-retreat-input" min="0" max="50" value="20" oninput="updateAISettings()">
+            </div>
+        </div>
+
+        <!-- TECH TREE PANEL -->
+        <div id="panel-research" class="panel hidden interactive">
+            <div class="panel-header">Research Matrix</div>
+            <div id="tech-nodes-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
+        </div>
+
+        <!-- ARENA DEPLOYMENT PANEL -->
+        <div id="panel-arena" class="panel hidden interactive">
+            <div class="panel-header">Sortie Deployment Zone</div>
+
+            <div class="form-group">
+                <label>Battle Environment</label>
+                <div class="parts-grid" style="max-height: 200px;">
+                    <div class="part-card equipped" id="arena-foundry" onclick="setArena('foundry')">
+                        <div class="part-name">Industrial Foundry</div>
+                        <div class="part-desc">Standard steel grid with heavy cover pillars and molten hazards.</div>
+                    </div>
+                    <div class="part-card" id="arena-volcanic" onclick="setArena('volcanic')">
+                        <div class="part-name">Volcanic Refinery</div>
+                        <div class="part-desc">Extreme ambient temperature. +35% weapon heat build-up.</div>
+                    </div>
+                    <div class="part-card" id="arena-wasteland" onclick="setArena('wasteland')">
+                        <div class="part-name">Frozen Wasteland</div>
+                        <div class="part-desc">Sub-zero tundra. Rapid weapon cooling, reduced traction.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Mission Type</label>
+                <div class="parts-grid" style="max-height: 180px;">
+                    <div class="part-card equipped" id="mode-skirmish" onclick="setGameMode('skirmish')">
+                        <div class="part-name">1v1 Skirmish</div>
+                        <div class="part-desc">Direct duel against a rival Iron Maw pilot. Low bounty payout.</div>
+                    </div>
+                    <div class="part-card" id="mode-survival" onclick="setGameMode('survival')">
+                        <div class="part-name">Endless Survival Waves</div>
+                        <div class="part-desc">Endless enemy drop pods. Test your durability against escalating waves.</div>
+                    </div>
+                    <div class="part-card" id="mode-boss" onclick="setGameMode('boss')">
+                        <div class="part-name">Boss Elimination: Omega Titan</div>
+                        <div class="part-desc">Engage a colossal Titan Siege Platform with massive shields & cannons.</div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn" style="margin-top: 10px;" onclick="startCombatDeployment()">DEPLOY MECH</button>
+        </div>
+
+        <!-- BATTLE HUD OVERLAY -->
+        <div id="hud-layer" style="display: none;">
+            <div id="wave-indicator">SURVIVAL WAVE 1</div>
+            <div style="display: flex; justify-content: space-between; width: 100%;">
+                <div class="hud-card">
+                    <div style="font-weight: 900; font-size: 13px; color: var(--accent-orange); margin-bottom: 8px;">
+                        PILOT - IRON MAW MECH
+                    </div>
+                    <div class="hud-meter">
+                        <div class="hud-meter-header"><span>HULL INTEGRITY</span><span id="hud-hp-val">2800 / 2800</span></div>
+                        <div class="hud-meter-bar"><div id="hud-hp-fill" class="hud-meter-fill fill-hp"></div></div>
+                    </div>
+                    <div class="hud-meter">
+                        <div class="hud-meter-header"><span>SHIELD MATRIX</span><span id="hud-shield-val">1000 / 1000</span></div>
+                        <div class="hud-meter-bar"><div id="hud-shield-fill" class="hud-meter-fill fill-shield"></div></div>
+                    </div>
+                    <div class="hud-meter">
+                        <div class="hud-meter-header"><span>HEAT SINK LEVEL</span><span id="hud-heat-val">0%</span></div>
+                        <div class="hud-meter-bar"><div id="hud-heat-fill" class="hud-meter-fill fill-heat" style="width: 0%;"></div></div>
+                    </div>
+                </div>
+
+                <div class="hud-card" id="target-hud-card" style="opacity: 0; transition: opacity 0.2s;">
+                    <div style="font-weight: 900; font-size: 13px; color: var(--accent-red); margin-bottom: 8px;" id="target-title-name">
+                        TARGET: HOSTILE MECH
+                    </div>
+                    <div class="hud-meter">
+                        <div class="hud-meter-header"><span>HULL INTEGRITY</span><span id="hud-target-hp-val">100%</span></div>
+                        <div class="hud-meter-bar"><div id="hud-target-hp-fill" class="hud-meter-fill fill-hp"></div></div>
+                    </div>
+                    <div class="hud-meter">
+                        <div class="hud-meter-header"><span>SHIELD BARRIER</span><span id="hud-target-shield-val">100%</span></div>
+                        <div class="hud-meter-bar"><div id="hud-target-shield-fill" class="hud-meter-fill fill-shield"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="reticle-container">
+                <div class="reticle-circle" id="reticle-circle"></div>
+                <div class="reticle-dot"></div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%;">
+                <div style="background: rgba(0,0,0,0.7); padding: 12px 18px; border-radius: 4px; border: 1px solid var(--border-panel); font-size: 12px; font-weight: 700;">
+                    [WASD] Strafe & Move | [MOUSE] Aim Crosshair | [LEFT CLICK] Fire Primary Weapons
+                </div>
+                <button class="btn btn-secondary interactive" onclick="abortMission()">ABORT MISSION</button>
+            </div>
+        </div>
+
+        <!-- POST BATTLE MODAL -->
+        <div id="modal-post-battle" class="modal-bg">
+            <div class="modal-card">
+                <div id="result-title-text" class="modal-title victory">VICTORY ACHIEVED</div>
+                <div id="result-subtitle-text" style="color: var(--text-dim); font-size: 13px;">Hostile units eliminated with full operational success.</div>
+
+                <div style="background: rgba(0,0,0,0.5); border: 1px solid var(--border-panel); padding: 18px; border-radius: 6px; display: flex; flex-direction: column; gap: 10px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 800;">
+                        <span>Credits Earned:</span><span id="rew-credits" style="color: var(--accent-yellow);">+400 CR</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 800;">
+                        <span>Research Data:</span><span id="rew-rp" style="color: var(--accent-cyan);">+100 RP</span>
+                    </div>
+                </div>
+
+                <button class="btn" onclick="closePostBattleModal()">RETURN TO HANGAR</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* =========================================================================
+           HIGH-DETAIL PROCEDURAL TEXTURES & BUMP MAPS
+           ========================================================================= */
+        function createIndustrialMetalTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#222834';
+            ctx.fillRect(0, 0, 512, 512);
+
+            for (let i = 0; i < 20000; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const val = Math.floor(Math.random() * 40);
+                ctx.fillStyle = `rgba(${val},${val},${val},0.08)`;
+                ctx.fillRect(x, y, 2, 2);
+            }
+
+            ctx.strokeStyle = '#0e121a';
+            ctx.lineWidth = 5;
+            for (let i = 0; i <= 512; i += 64) {
+                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+            }
+
+            ctx.strokeStyle = '#3b475a';
+            ctx.lineWidth = 2;
+            for (let i = 2; i < 512; i += 64) {
+                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+            }
+
+            ctx.fillStyle = '#64748b';
+            for (let x = 12; x < 512; x += 64) {
+                for (let y = 12; y < 512; y += 64) {
+                    ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(x + 40, y + 40, 2.5, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(2, 2);
+            return texture;
+        }
+
+        function createBumpMapTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, 256, 256);
+            ctx.fillStyle = '#ffffff';
+            for (let i = 0; i < 256; i += 32) {
+                ctx.fillRect(i, 0, 2, 256);
+                ctx.fillRect(0, i, 256, 2);
+            }
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(4, 4);
+            return texture;
+        }
+
+        const METAL_TEXTURE = createIndustrialMetalTexture();
+        const BUMP_TEXTURE = createBumpMapTexture();
+
+        /* =========================================================================
+           DATA CONFIGURATION & GAME DATABASE
+           ========================================================================= */
+        const PARTS_DB = {
+            head: [
+                { id: "scout_head", name: "Scout Optics Array", hp: 200, shield: 100, speed: 6, cost: 0, unlocked: true, desc: "Light high-res scanner cowl with multi-lens target sensors." },
+                { id: "combat_head", name: "Iron Command Visor", hp: 450, shield: 250, speed: 0, cost: 1200, unlocked: false, desc: "Heavy military visor with sloped composite faceplate." },
+                { id: "siege_head", name: "Siege Dread Helmet", hp: 800, shield: 450, speed: -6, cost: 3500, unlocked: false, desc: "Reinforced armored crown designed for brutal frontline pressure." }
+            ],
+            torso: [
+                { id: "light_torso", name: "Striker Lightweight Frame", hp: 1400, shield: 500, energy: 120, speed: 18, cost: 0, unlocked: true, desc: "Agile chassis equipped with streamlined thruster wings." },
+                { id: "heavy_torso", name: "Iron Maw Heavy Torso", hp: 2600, shield: 1000, energy: 160, speed: 0, cost: 2500, unlocked: false, desc: "Massive industrial frame featuring dual chest reactor intakes." },
+                { id: "assault_torso", name: "Omega Citadel Torso", hp: 4200, shield: 1600, energy: 220, speed: -12, cost: 6000, unlocked: false, desc: "Impenetrable siege chassis with dynamic chest plating." }
+            ],
+            arms: [
+                { id: "cannon_arms", name: "Heavy Rotary Autocannons", damage: 320, heatRate: 15, range: 70, cost: 0, unlocked: true, desc: "Dual twin-barrel ballistic rotary cannons with high fire rate." },
+                { id: "plasma_arms", name: "Twin Plasma Emitters", damage: 520, heatRate: 26, range: 85, cost: 2800, unlocked: false, desc: "Superheated plasma chargers that melt shields instantly." },
+                { id: "railgun_arms", name: "Linear Magnetic Railguns", damage: 850, heatRate: 42, range: 140, cost: 5500, unlocked: false, desc: "Extreme long-range kinetic accelerators that pierce armor." }
+            ],
+            legs: [
+                { id: "walker_legs", name: "Bipedal Piston Hydraulics", hp: 500, speed: 55, cost: 0, unlocked: true, desc: "Articulated mechanical bipedal legs with knee shock absorbers." },
+                { id: "treads_legs", name: "Armored Twin Treads", hp: 1200, speed: 38, cost: 2000, unlocked: false, desc: "Heavy tank track modules providing maximum stability." },
+                { id: "hover_legs", name: "Anti-Grav Thruster Ring", hp: 400, speed: 85, cost: 4800, unlocked: false, desc: "High-tech hover propulsion ring for rapid directional strafing." }
+            ],
+            core: [
+                { id: "standard_core", name: "Fission Power Core", energy: 100, heatCool: 40, cost: 0, unlocked: true, desc: "Standard reactor core with reliable heat sink venting." },
+                { id: "high_output_core", name: "Overcharged Fusion Core", energy: 160, heatCool: 60, cost: 1800, unlocked: false, desc: "Boosted power generation for energy weapon loadouts." },
+                { id: "overclocked_core", name: "Singularity Reactor Core", energy: 240, heatCool: 85, cost: 4200, unlocked: false, desc: "Experimental reactor providing extreme power and cryo cooling." }
+            ],
+            armor: [
+                { id: "light_armor", name: "Standard Composite Plating", hpBonus: 0, speedBonus: 5, cost: 0, unlocked: true, desc: "Baseline factory armor alloy." },
+                { id: "heavy_armor", name: "Sloped Titanium Plating", hpBonus: 1000, speedBonus: -8, cost: 1500, unlocked: false, desc: "Dense sloped armor plates built to deflect kinetic rounds." },
+                { id: "reactive_armor", name: "Reactive Nanite Armor", hpBonus: 2000, speedBonus: -16, cost: 3800, unlocked: false, desc: "Smart armor that dissipates explosions upon impact." }
+            ]
+        };
+
+        const TECH_NODES = [
+            { id: "tech_1", name: "Cryo Injectors", category: "Cooling", cost: 150, unlocked: false, desc: "+25% faster heat sink recovery rate." },
+            { id: "tech_2", name: "Overcharged Capacitors", category: "Shields", cost: 250, unlocked: false, desc: "+30% faster shield regeneration rate." },
+            { id: "tech_3", name: "High-Velocity Acceleration", category: "Weapons", cost: 400, unlocked: false, desc: "+20% projectile speed and kinetic damage." }
+        ];
+
+        const COLOR_PALETTES = {
+            primary: [0x282e3a, 0x5a1e1e, 0x1d3e2e, 0x4e3e1e, 0x0f172a, 0x475569],
+            secondary: [0xff5500, 0x00f0ff, 0xffb700, 0xe2e8f0, 0xff2244, 0x00ff66],
+            emissive: [0x00f0ff, 0xff2244, 0x00ff66, 0xffaa00, 0xa855f7]
+        };
+
+        let GAME_STATE = {
+            credits: 2000,
+            rp: 100,
+            tokens: 0,
+            currentTab: 'garage',
+            activePartCategory: 'head',
+            selectedArena: 'foundry',
+            selectedMode: 'skirmish',
+            inBattle: false,
+            survivalWave: 1,
+            survivalEarnings: 0,
+            equipped: {
+                head: 'scout_head',
+                torso: 'light_torso',
+                arms: 'cannon_arms',
+                legs: 'walker_legs',
+                core: 'standard_core',
+                armor: 'light_armor'
+            },
+            paint: {
+                primary: 0x282e3a,
+                secondary: 0xff5500,
+                emissive: 0x00f0ff
+            },
+            aiConfig: {
+                preset: 'aggressive',
+                range: 40,
+                retreat: 20
+            }
+        };
+
+        /* =========================================================================
+           THREE.JS SCENE, CAMERA & GRAPHICS INITIALIZATION
+           ========================================================================= */
+        let scene, camera, renderer;
+        let garageMechMesh, playerEntity, enemyEntities = [];
+        let projectiles = [], particles = [], arenaObstacles = [];
+        let cameraShake = 0;
+        let activeWeaponBarrelIndex = 0;
+        let clock = new THREE.Clock();
+
+        function initGraphicsEngine() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x05070a);
+            scene.fog = new THREE.FogExp2(0x05070a, 0.008);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 4, 11);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.1;
+            container.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const mainLight = new THREE.DirectionalLight(0xfff2e6, 1.6);
+            mainLight.position.set(25, 45, 25);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 2048;
+            mainLight.shadow.mapSize.height = 2048;
+            mainLight.shadow.bias = -0.0005;
+            scene.add(mainLight);
+
+            const rimLight = new THREE.DirectionalLight(0x00f0ff, 0.8);
+            rimLight.position.set(-25, 15, -25);
+            scene.add(rimLight);
+
+            setupGarageEnvironment();
+            updateGarageMechDisplay();
+
+            window.addEventListener('resize', onWindowResize);
+            setupInputControls();
+
+            animate();
+        }
+
+        function setupGarageEnvironment() {
+            scene.children.filter(c => c.name === 'garage_env').forEach(c => scene.remove(c));
+
+            const platformGroup = new THREE.Group();
+            platformGroup.name = 'garage_env';
+
+            const baseGeo = new THREE.CylinderGeometry(8.5, 9, 0.8, 32);
+            const baseMat = new THREE.MeshStandardMaterial({ 
+                color: 0x111622, roughness: 0.35, metalness: 0.85, 
+                map: METAL_TEXTURE, bumpMap: BUMP_TEXTURE, bumpScale: 0.04 
+            });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.y = -0.4;
+            base.receiveShadow = true;
+            platformGroup.add(base);
+
+            const ringGeo = new THREE.TorusGeometry(8.2, 0.15, 16, 64);
+            ringGeo.rotateX(Math.PI / 2);
+            const ringMat = new THREE.MeshStandardMaterial({ color: 0xff5500, emissive: 0xff5500, emissiveIntensity: 1.5 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.position.y = 0.02;
+            platformGroup.add(ring);
+
+            const grid = new THREE.GridHelper(32, 32, 0xff5500, 0x1e293b);
+            grid.position.y = 0.01;
+            platformGroup.add(grid);
+
+            scene.add(platformGroup);
+        }
+
+        /* =========================================================================
+           DYNAMIC DIVERSE PROCEDURAL MECH MODEL GENERATOR
+           ========================================================================= */
+        function getRandomEnemyLoadout() {
+            const categories = ['head', 'torso', 'arms', 'legs', 'core', 'armor'];
+            const loadout = {};
+            categories.forEach(cat => {
+                const parts = PARTS_DB[cat];
+                loadout[cat] = parts[Math.floor(Math.random() * parts.length)].id;
+            });
+
+            const enemyPalettes = [
+                { primary: 0x8b0000, secondary: 0x1a1a1a, emissive: 0xff3300 }, // Crimson Rampage
+                { primary: 0x1f3a60, secondary: 0x0f172a, emissive: 0x00f0ff }, // Cobalt Interceptor
+                { primary: 0x2d4a1d, secondary: 0x111827, emissive: 0x00ff66 }, // Toxic Ravager
+                { primary: 0x5a3e1b, secondary: 0x221810, emissive: 0xffb700 }, // Wasteland Dread
+                { primary: 0x4a1d5a, secondary: 0x180f24, emissive: 0xa855f7 }, // Void Sentinel
+                { primary: 0x333333, secondary: 0xff0000, emissive: 0xff2222 }  // Shadow Executioner
+            ];
+            const paint = enemyPalettes[Math.floor(Math.random() * enemyPalettes.length)];
+
+            return { loadout, paint };
+        }
+
+        function createProceduralMechMesh(equipped, paint) {
+            const mech = new THREE.Group();
+
+            const matPrimary = new THREE.MeshStandardMaterial({ 
+                color: paint.primary, roughness: 0.35, metalness: 0.8, 
+                map: METAL_TEXTURE, bumpMap: BUMP_TEXTURE, bumpScale: 0.03 
+            });
+            const matSecondary = new THREE.MeshStandardMaterial({ color: paint.secondary, roughness: 0.3, metalness: 0.85 });
+            const matEmissive = new THREE.MeshStandardMaterial({ color: paint.emissive, emissive: paint.emissive, emissiveIntensity: 3.0 });
+            const matDark = new THREE.MeshStandardMaterial({ color: 0x0e1117, roughness: 0.5, metalness: 0.9 });
+            const matGun = new THREE.MeshStandardMaterial({ color: 0x1b1f28, roughness: 0.25, metalness: 0.95 });
+
+            // TORSO DESIGN VARIATIONS
+            const torsoGroup = new THREE.Group();
+            torsoGroup.name = "torsoGroup";
+            torsoGroup.position.y = 3.0;
+
+            let torsoWidth = 2.0;
+            let torsoHeight = 2.2;
+
+            if (equipped.torso === 'light_torso') {
+                torsoWidth = 1.8;
+                torsoHeight = 2.0;
+
+                const torsoGeo = new THREE.ConeGeometry(1.2, 2.2, 5);
+                torsoGeo.rotateX(Math.PI);
+                const torsoMesh = new THREE.Mesh(torsoGeo, matPrimary);
+                torsoMesh.castShadow = true;
+                torsoGroup.add(torsoMesh);
+
+                [-1.2, 1.2].forEach(x => {
+                    const wing = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.4, 1.6), matSecondary);
+                    wing.position.set(x, 0.2, -0.2);
+                    wing.rotation.z = x > 0 ? -0.3 : 0.3;
+                    torsoGroup.add(wing);
+                });
+            } else if (equipped.torso === 'heavy_torso') {
+                torsoWidth = 2.6;
+                torsoHeight = 2.5;
+
+                const torsoGeo = new THREE.BoxGeometry(2.6, 2.4, 2.2);
+                const torsoMesh = new THREE.Mesh(torsoGeo, matPrimary);
+                torsoMesh.castShadow = true;
+                torsoGroup.add(torsoMesh);
+
+                const chestGeo = new THREE.BoxGeometry(2.2, 1.4, 0.7);
+                const chestMesh = new THREE.Mesh(chestGeo, matSecondary);
+                chestMesh.position.set(0, 0.2, 1.2);
+                chestMesh.rotation.x = -0.18;
+                chestMesh.castShadow = true;
+                torsoGroup.add(chestMesh);
+            } else if (equipped.torso === 'assault_torso') {
+                torsoWidth = 3.2;
+                torsoHeight = 2.8;
+
+                const torsoGeo = new THREE.CylinderGeometry(1.9, 1.6, 2.6, 8);
+                const torsoMesh = new THREE.Mesh(torsoGeo, matPrimary);
+                torsoMesh.castShadow = true;
+                torsoGroup.add(torsoMesh);
+
+                [-0.8, 0.8].forEach(x => {
+                    const slab = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.8, 0.5), matSecondary);
+                    slab.position.set(x, 0, 1.4);
+                    slab.rotation.y = x > 0 ? -0.2 : 0.2;
+                    torsoGroup.add(slab);
+                });
+            }
+
+            // Core Reactor Intake
+            const reactorMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.35, 16), matEmissive);
+            reactorMesh.rotateX(Math.PI / 2);
+            reactorMesh.position.set(0, 0.2, torsoWidth * 0.5 + 0.1);
+            torsoGroup.add(reactorMesh);
+
+            // Back Exhausts
+            [-0.7, 0.7].forEach(x => {
+                const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 1.8, 12), matDark);
+                stack.position.set(x * (torsoWidth * 0.4), 1.0, -1.2);
+                stack.rotation.x = -0.2;
+                torsoGroup.add(stack);
+            });
+
+            // HEAD DESIGN VARIATIONS
+            const headGroup = new THREE.Group();
+            headGroup.position.set(0, torsoHeight * 0.65, 0.2);
+
+            if (equipped.head === 'scout_head') {
+                const headMesh = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.9, 4), matPrimary);
+                headMesh.rotateX(Math.PI / 2);
+                headGroup.add(headMesh);
+
+                [-0.2, 0.2].forEach((x) => {
+                    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.2, 10), matEmissive);
+                    lens.rotateX(Math.PI / 2);
+                    lens.position.set(x, 0.1, 0.4);
+                    headGroup.add(lens);
+                });
+            } else if (equipped.head === 'combat_head') {
+                const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.75, 0.95), matPrimary);
+                headGroup.add(headMesh);
+
+                const visorMesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.22, 0.25), matEmissive);
+                visorMesh.position.set(0, 0.05, 0.52);
+                headGroup.add(visorMesh);
+            } else if (equipped.head === 'siege_head') {
+                const headMesh = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.0, 1.3), matPrimary);
+                headGroup.add(headMesh);
+
+                const visorMesh = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.15, 0.3), matEmissive);
+                visorMesh.position.set(0, 0.1, 0.68);
+                headGroup.add(visorMesh);
+
+                [-0.5, 0.5].forEach(x => {
+                    const horn = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.8, 0.3), matSecondary);
+                    horn.position.set(x, 0.7, 0);
+                    horn.rotation.z = x > 0 ? -0.3 : 0.3;
+                    headGroup.add(horn);
+                });
+            }
+            torsoGroup.add(headGroup);
+            mech.add(torsoGroup);
+
+            // LEGS DESIGN VARIATIONS
+            const legsGroup = new THREE.Group();
+            legsGroup.name = "legsGroup";
+
+            if (equipped.legs === 'treads_legs') {
+                [-1.6, 1.6].forEach(side => {
+                    const treadGroup = new THREE.Group();
+                    treadGroup.position.set(side, 0.8, 0);
+
+                    const treadBody = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.5, 4.0), matDark);
+                    treadGroup.add(treadBody);
+
+                    const skirt = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.6, 4.1), matSecondary);
+                    skirt.position.y = 0.5;
+                    treadGroup.add(skirt);
+
+                    for (let w = -1.5; w <= 1.5; w += 0.75) {
+                        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 1.15, 16), matGun);
+                        wheel.rotateZ(Math.PI / 2);
+                        wheel.position.set(0, -0.3, w);
+                        treadGroup.add(wheel);
+                    }
+                    legsGroup.add(treadGroup);
+                });
+            } else if (equipped.legs === 'hover_legs') {
+                const ringGeo = new THREE.TorusGeometry(1.85, 0.35, 16, 32);
+                ringGeo.rotateX(Math.PI / 2);
+                const ring = new THREE.Mesh(ringGeo, matSecondary);
+                ring.position.y = 1.1;
+                legsGroup.add(ring);
+
+                const glowDisk = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.25, 32), matEmissive);
+                glowDisk.position.y = 0.9;
+                legsGroup.add(glowDisk);
+            } else {
+                const pelvis = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 1.4), matDark);
+                pelvis.position.y = 1.8;
+                legsGroup.add(pelvis);
+
+                [-1.2, 1.2].forEach((side, idx) => {
+                    const legContainer = new THREE.Group();
+                    legContainer.name = `leg_${idx}`;
+                    legContainer.position.set(side, 1.7, 0);
+
+                    const hip = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 16), matDark);
+                    legContainer.add(hip);
+
+                    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.65, 1.4, 0.75), matPrimary);
+                    thigh.position.set(0, -0.7, 0);
+                    legContainer.add(thigh);
+
+                    const knee = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.55, 0.95), matSecondary);
+                    knee.position.set(0, -1.4, 0.2);
+                    legContainer.add(knee);
+
+                    const shin = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.6, 0.8), matPrimary);
+                    shin.position.set(0, -2.2, 0.1);
+                    legContainer.add(shin);
+
+                    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.45, 1.7), matDark);
+                    foot.position.set(0, -3.0, 0.3);
+                    legContainer.add(foot);
+
+                    legsGroup.add(legContainer);
+                });
+            }
+            mech.add(legsGroup);
+
+            // WEAPON MOUNT BARRELS
+            [-1, 1].forEach((side, sIdx) => {
+                const armGroup = new THREE.Group();
+                armGroup.position.set(side * (torsoWidth * 0.68), 3.2, 0);
+
+                const shoulder = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.3), matSecondary);
+                armGroup.add(shoulder);
+
+                const armStrut = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.2, 0.6), matDark);
+                armStrut.position.y = -0.8;
+                armGroup.add(armStrut);
+
+                const weaponMount = new THREE.Group();
+                weaponMount.position.set(0, -1.2, 0.2);
+
+                const barrelTipDummy = new THREE.Object3D();
+                barrelTipDummy.name = "barrelTip";
+
+                if (equipped.arms === 'railgun_arms') {
+                    const body = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 2.4), matGun);
+                    weaponMount.add(body);
+
+                    [-0.25, 0.25].forEach(ry => {
+                        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 4.2), matSecondary);
+                        rail.position.set(0, ry, 1.4);
+                        weaponMount.add(rail);
+                    });
+
+                    barrelTipDummy.position.set(0, 0, 3.5);
+                } else if (equipped.arms === 'plasma_arms') {
+                    const body = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.95, 2.2), matGun);
+                    weaponMount.add(body);
+
+                    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), matEmissive);
+                    orb.position.set(0, 0, 1.2);
+                    weaponMount.add(orb);
+
+                    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.35, 1.2, 16), matSecondary);
+                    nozzle.rotateX(Math.PI / 2);
+                    nozzle.position.set(0, 0, 1.6);
+                    weaponMount.add(nozzle);
+
+                    barrelTipDummy.position.set(0, 0, 2.3);
+                } else {
+                    const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 2.0), matGun);
+                    weaponMount.add(body);
+
+                    const barrelBundle = new THREE.Group();
+                    barrelBundle.position.set(0, 0, 1.2);
+
+                    for (let b = 0; b < 6; b++) {
+                        const angle = (b / 6) * Math.PI * 2;
+                        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 8), matDark);
+                        barrel.rotateX(Math.PI / 2);
+                        barrel.position.set(Math.cos(angle) * 0.22, Math.sin(angle) * 0.22, 1.2);
+                        barrelBundle.add(barrel);
+                    }
+                    weaponMount.add(barrelBundle);
+                    barrelTipDummy.position.set(0, 0, 2.4);
+                }
+
+                weaponMount.add(barrelTipDummy);
+                armGroup.add(weaponMount);
+                mech.add(armGroup);
+            });
+
+            return mech;
+        }
+
+        function updateGarageMechDisplay() {
+            if (garageMechMesh) scene.remove(garageMechMesh);
+            garageMechMesh = createProceduralMechMesh(GAME_STATE.equipped, GAME_STATE.paint);
+            scene.add(garageMechMesh);
+        }
+
+        /* =========================================================================
+           STAT CALCULATIONS & UI MANAGEMENT
+           ========================================================================= */
+        function calculateMechStats() {
+            let hp = 0, shield = 0, energy = 0, speed = 0, heatCool = 0, damage = 0;
+
+            Object.keys(GAME_STATE.equipped).forEach(cat => {
+                const partId = GAME_STATE.equipped[cat];
+                const partData = PARTS_DB[cat].find(p => p.id === partId);
+                if (partData) {
+                    if (partData.hp) hp += partData.hp;
+                    if (partData.shield) shield += partData.shield;
+                    if (partData.energy) energy += partData.energy;
+                    if (partData.speed) speed += partData.speed;
+                    if (partData.heatCool) heatCool += partData.heatCool;
+                    if (partData.damage) damage += partData.damage;
+                    if (partData.hpBonus) hp += partData.hpBonus;
+                    if (partData.speedBonus) speed += partData.speedBonus;
+                }
+            });
+
+            if (TECH_NODES.find(t => t.id === 'tech_1' && t.unlocked)) heatCool *= 1.25;
+            if (TECH_NODES.find(t => t.id === 'tech_2' && t.unlocked)) shield *= 1.30;
+            if (TECH_NODES.find(t => t.id === 'tech_3' && t.unlocked)) damage *= 1.20;
+
+            return { hp, shield, energy, speed, heatCool, damage };
+        }
+
+        function refreshStatsUI() {
+            const stats = calculateMechStats();
+
+            document.getElementById('stat-hp-val').innerText = stats.hp;
+            document.getElementById('stat-shield-val').innerText = stats.shield;
+            document.getElementById('stat-energy-val').innerText = `${stats.energy} MW`;
+            document.getElementById('stat-speed-val').innerText = `${stats.speed} km/h`;
+            document.getElementById('stat-heat-val').innerText = `${Math.round(stats.heatCool)}/s`;
+
+            document.getElementById('stat-hp-bar').style.width = `${Math.min(100, (stats.hp / 6000) * 100)}%`;
+            document.getElementById('stat-shield-bar').style.width = `${Math.min(100, (stats.shield / 2500) * 100)}%`;
+            document.getElementById('stat-energy-bar').style.width = `${Math.min(100, (stats.energy / 300) * 100)}%`;
+            document.getElementById('stat-speed-bar').style.width = `${Math.min(100, (stats.speed / 100) * 100)}%`;
+            document.getElementById('stat-heat-bar').style.width = `${Math.min(100, (stats.heatCool / 120) * 100)}%`;
+        }
+
+        function selectPartCategory(cat) {
+            GAME_STATE.activePartCategory = cat;
+            document.querySelectorAll('#part-category-selector .cat-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('onclick').includes(cat));
+            });
+            renderPartList();
+        }
+
+        function renderPartList() {
+            const grid = document.getElementById('parts-list-grid');
+            grid.innerHTML = '';
+
+            const cat = GAME_STATE.activePartCategory;
+            const parts = PARTS_DB[cat] || [];
+
+            parts.forEach(part => {
+                const card = document.createElement('div');
+                const isEquipped = GAME_STATE.equipped[cat] === part.id;
+                
+                card.className = `part-card ${isEquipped ? 'equipped' : ''} ${!part.unlocked ? 'locked' : ''}`;
+                card.innerHTML = `
+                    <div class="part-title-row">
+                        <span class="part-name">${part.name}</span>
+                        <span class="part-status ${isEquipped ? 'status-equipped' : (part.unlocked ? 'status-unlocked' : 'status-locked')}">
+                            ${isEquipped ? 'EQUIPPED' : (part.unlocked ? 'SELECT' : `${part.cost} CR`)}
+                        </span>
+                    </div>
+                    <div class="part-desc">${part.desc}</div>
+                `;
+
+                card.onclick = () => {
+                    if (part.unlocked) {
+                        GAME_STATE.equipped[cat] = part.id;
+                        renderPartList();
+                        refreshStatsUI();
+                        updateGarageMechDisplay();
+                    } else if (GAME_STATE.credits >= part.cost) {
+                        GAME_STATE.credits -= part.cost;
+                        part.unlocked = true;
+                        GAME_STATE.equipped[cat] = part.id;
+                        updateCurrencyUI();
+                        renderPartList();
+                        refreshStatsUI();
+                        updateGarageMechDisplay();
+                    }
+                };
+
+                grid.appendChild(card);
+            });
+        }
+
+        function setupColorPickers() {
+            ['primary', 'secondary', 'emissive'].forEach(type => {
+                const grid = document.getElementById(`paint-${type}-grid`);
+                grid.innerHTML = '';
+                COLOR_PALETTES[type].forEach(hex => {
+                    const swatch = document.createElement('div');
+                    swatch.className = `color-swatch ${GAME_STATE.paint[type] === hex ? 'active' : ''}`;
+                    swatch.style.background = `#${hex.toString(16).padStart(6, '0')}`;
+                    swatch.onclick = () => {
+                        GAME_STATE.paint[type] = hex;
+                        setupColorPickers();
+                        updateGarageMechDisplay();
+                    };
+                    grid.appendChild(swatch);
+                });
+            });
+        }
+
+        function renderTechTree() {
+            const container = document.getElementById('tech-nodes-list');
+            container.innerHTML = '';
+
+            TECH_NODES.forEach(tech => {
+                const card = document.createElement('div');
+                card.className = `part-card ${tech.unlocked ? 'equipped' : ''}`;
+                card.innerHTML = `
+                    <div class="part-title-row">
+                        <span class="part-name">${tech.name}</span>
+                        <span class="part-status ${tech.unlocked ? 'status-equipped' : 'status-unlocked'}">
+                            ${tech.unlocked ? 'RESEARCHED' : `${tech.cost} RP`}
+                        </span>
+                    </div>
+                    <div class="part-desc">${tech.desc}</div>
+                `;
+
+                card.onclick = () => {
+                    if (!tech.unlocked && GAME_STATE.rp >= tech.cost) {
+                        GAME_STATE.rp -= tech.cost;
+                        tech.unlocked = true;
+                        updateCurrencyUI();
+                        renderTechTree();
+                        refreshStatsUI();
+                    }
+                };
+
+                container.appendChild(card);
+            });
+        }
+
+        function switchTab(tabName) {
+            GAME_STATE.currentTab = tabName;
+            document.querySelectorAll('.nav-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('onclick').includes(tabName));
+            });
+
+            document.querySelectorAll('.panel').forEach(panel => panel.classList.add('hidden'));
+            const panel = document.getElementById(`panel-${tabName}`);
+            if (panel) panel.classList.remove('hidden');
+
+            if (tabName === 'customizer') {
+                camera.position.set(0, 3, 7);
+            } else if (tabName === 'garage') {
+                camera.position.set(0, 4, 11);
+            }
+        }
+
+        function setArena(arenaId) {
+            GAME_STATE.selectedArena = arenaId;
+            ['foundry', 'volcanic', 'wasteland'].forEach(id => {
+                document.getElementById(`arena-${id}`).classList.toggle('equipped', id === arenaId);
+            });
+        }
+
+        function setGameMode(modeId) {
+            GAME_STATE.selectedMode = modeId;
+            ['skirmish', 'survival', 'boss'].forEach(id => {
+                document.getElementById(`mode-${id}`).classList.toggle('equipped', id === modeId);
+            });
+        }
+
+        function updateAISettings() {
+            GAME_STATE.aiConfig.preset = document.getElementById('ai-preset-select').value;
+            GAME_STATE.aiConfig.range = document.getElementById('ai-range-input').value;
+            GAME_STATE.aiConfig.retreat = document.getElementById('ai-retreat-input').value;
+
+            document.getElementById('ai-range-lbl').innerText = `${GAME_STATE.aiConfig.range}m`;
+            document.getElementById('ai-retreat-lbl').innerText = `${GAME_STATE.aiConfig.retreat}%`;
+        }
+
+        function updateCurrencyUI() {
+            document.getElementById('res-credits-val').innerText = GAME_STATE.credits.toLocaleString();
+            document.getElementById('res-rp-val').innerText = GAME_STATE.rp.toLocaleString();
+            document.getElementById('res-tokens-val').innerText = GAME_STATE.tokens.toLocaleString();
+        }
+
+        /* =========================================================================
+           REAL-TIME COMBAT ENGINE, COLLISION & ENDLESS SURVIVAL WAVES
+           ========================================================================= */
+        let keys = {};
+        let mousePos = new THREE.Vector2();
+
+        function setupInputControls() {
+            window.addEventListener('keydown', e => keys[e.code] = true);
+            window.addEventListener('keyup', e => keys[e.code] = false);
+            window.addEventListener('mousemove', e => {
+                mousePos.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mousePos.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                const reticle = document.getElementById('reticle-circle');
+                if (reticle) {
+                    reticle.style.transform = `translate(${mousePos.x * 25}px, ${-mousePos.y * 25}px)`;
+                }
+            });
+
+            window.addEventListener('mousedown', e => {
+                if (GAME_STATE.inBattle && e.button === 0) firePlayerWeapon();
+            });
+        }
+
+        function startCombatDeployment() {
+            GAME_STATE.inBattle = true;
+            GAME_STATE.survivalWave = 1;
+            GAME_STATE.survivalEarnings = 0;
+
+            document.getElementById('main-nav').style.display = 'none';
+            document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+            document.getElementById('hud-layer').style.display = 'flex';
+
+            const waveInd = document.getElementById('wave-indicator');
+            if (GAME_STATE.selectedMode === 'survival') {
+                waveInd.style.display = 'block';
+                waveInd.innerText = `SURVIVAL WAVE 1`;
+            } else {
+                waveInd.style.display = 'none';
+            }
+
+            scene.children.filter(c => c.name === 'garage_env').forEach(c => scene.remove(c));
+            if (garageMechMesh) scene.remove(garageMechMesh);
+
+            buildArenaGraphics();
+
+            const stats = calculateMechStats();
+            playerEntity = {
+                mesh: createProceduralMechMesh(GAME_STATE.equipped, GAME_STATE.paint),
+                hp: stats.hp,
+                maxHp: stats.hp,
+                shield: stats.shield,
+                maxShield: stats.shield,
+                heat: 0,
+                maxHeat: 100,
+                heatCoolRate: stats.heatCool,
+                speed: stats.speed * 0.45,
+                position: new THREE.Vector3(0, 0, 30),
+                radius: 2.2,
+                walkTimer: 0
+            };
+            playerEntity.mesh.position.copy(playerEntity.position);
+            scene.add(playerEntity.mesh);
+
+            spawnEnemyWave(1);
+            document.getElementById('target-hud-card').style.opacity = '1';
+        }
+
+        function buildArenaGraphics() {
+            arenaObstacles = [];
+
+            let floorColor = 0x121824;
+            if (GAME_STATE.selectedArena === 'volcanic') floorColor = 0x240d0d;
+            if (GAME_STATE.selectedArena === 'wasteland') floorColor = 0x0d2028;
+
+            const floor = new THREE.Mesh(
+                new THREE.PlaneGeometry(300, 300),
+                new THREE.MeshStandardMaterial({ color: floorColor, roughness: 0.8, map: METAL_TEXTURE, bumpMap: BUMP_TEXTURE, bumpScale: 0.05 })
+            );
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // Cover Pillars with precise solid physical collision
+            for (let i = 0; i < 22; i++) {
+                const px = (Math.random() - 0.5) * 220;
+                const pz = (Math.random() - 0.5) * 220;
+
+                if (Math.hypot(px, pz - 30) < 18 || Math.hypot(px, pz + 40) < 18) continue;
+
+                const pillarGeo = new THREE.BoxGeometry(9, 22, 9);
+                const pillarMat = new THREE.MeshStandardMaterial({ 
+                    color: 0x1e293b, roughness: 0.4, metalness: 0.8,
+                    map: METAL_TEXTURE, bumpMap: BUMP_TEXTURE, bumpScale: 0.06 
+                });
+                const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+                pillar.position.set(px, 11, pz);
+                pillar.castShadow = true;
+                pillar.receiveShadow = true;
+                scene.add(pillar);
+
+                const capGeo = new THREE.BoxGeometry(9.2, 0.4, 9.2);
+                const capMat = new THREE.MeshStandardMaterial({ color: 0xff5500, emissive: 0xff5500, emissiveIntensity: 1.2 });
+                const cap = new THREE.Mesh(capGeo, capMat);
+                cap.position.set(px, 1.2, pz);
+                scene.add(cap);
+
+                arenaObstacles.push({
+                    mesh: pillar,
+                    pos: new THREE.Vector3(px, 0, pz),
+                    halfSize: 4.5 // Exact half-width for 9x9 box
+                });
+            }
+        }
+
+        /* REINFORCED SOLID PILLAR COLLISION RESOLUTION */
+        function resolveObstacleCollisions(pos, radius) {
+            for (const obs of arenaObstacles) {
+                const nearestX = Math.max(obs.pos.x - obs.halfSize, Math.min(obs.pos.x + obs.halfSize, pos.x));
+                const nearestZ = Math.max(obs.pos.z - obs.halfSize, Math.min(obs.pos.z + obs.halfSize, pos.z));
+
+                const distX = pos.x - nearestX;
+                const distZ = pos.z - nearestZ;
+                const distanceSq = distX * distX + distZ * distZ;
+
+                if (distanceSq < radius * radius) {
+                    const distance = Math.sqrt(distanceSq);
+                    if (distance > 0.0001) {
+                        const overlap = radius - distance;
+                        pos.x += (distX / distance) * overlap;
+                        pos.z += (distZ / distance) * overlap;
+                    } else {
+                        pos.x += radius;
+                    }
+                }
+            }
+
+            pos.x = Math.max(-140, Math.min(140, pos.x));
+            pos.z = Math.max(-140, Math.min(140, pos.z));
+        }
+
+        /* SPAWN ENEMY WAVE WITH STRONGER STATS & MODEL VARIETY */
+        function spawnEnemyWave(wave) {
+            enemyEntities.forEach(e => scene.remove(e.mesh));
+            enemyEntities = [];
+
+            const isBoss = GAME_STATE.selectedMode === 'boss';
+            const isSurvival = GAME_STATE.selectedMode === 'skirmish' ? false : (GAME_STATE.selectedMode === 'survival');
+
+            let count = 1;
+            if (isSurvival) {
+                count = Math.min(6, 1 + Math.floor((wave - 1) * 0.7));
+                document.getElementById('wave-indicator').innerText = `SURVIVAL WAVE ${wave}`;
+            }
+
+            for (let i = 0; i < count; i++) {
+                const enemyData = getRandomEnemyLoadout();
+                const enemyMesh = createProceduralMechMesh(enemyData.loadout, enemyData.paint);
+
+                // STRONGER BUFFED ENEMY STATS
+                let baseHp = 5500;
+                let baseShield = 2200;
+                let baseDamage = 320;
+                let scale = 1.0;
+
+                if (isBoss) {
+                    baseHp = 65000;
+                    baseShield = 20000;
+                    baseDamage = 650;
+                    scale = 2.8;
+                } else if (isSurvival) {
+                    const waveMult = 1 + (wave - 1) * 0.45;
+                    baseHp = Math.round(baseHp * waveMult);
+                    baseShield = Math.round(baseShield * waveMult);
+                    baseDamage = Math.round(baseDamage * (1 + (wave - 1) * 0.25));
+                }
+
+                if (scale !== 1.0) enemyMesh.scale.set(scale, scale, scale);
+
+                // Spawn position randomized across arena
+                let spawnX = (Math.random() - 0.5) * 120;
+                let spawnZ = -40 - (Math.random() * 50);
+                if (count > 1) {
+                    spawnX = (i - (count - 1) / 2) * 28 + (Math.random() - 0.5) * 10;
+                }
+
+                const enemy = {
+                    mesh: enemyMesh,
+                    hp: baseHp,
+                    maxHp: baseHp,
+                    shield: baseShield,
+                    maxShield: baseShield,
+                    damage: baseDamage,
+                    position: new THREE.Vector3(spawnX, 0, spawnZ),
+                    radius: isBoss ? 6.2 : 2.5,
+                    cooldown: Math.random() * 0.8,
+                    isBoss: isBoss,
+                    name: isBoss ? "OMEGA TITAN SIEGE PLATFORM" : `HOSTILE UNIT [WAVE ${wave}]`,
+                    walkTimer: 0
+                };
+
+                enemyMesh.position.copy(enemy.position);
+                scene.add(enemyMesh);
+                enemyEntities.push(enemy);
+            }
+
+            if (enemyEntities.length > 0) {
+                document.getElementById('target-title-name').innerText = enemyEntities[0].name;
+            }
+        }
+
+        /* ACCURATE WEAPON FIRING DIRECTLY FROM BARREL TIP MARKS */
+        function firePlayerWeapon() {
+            if (!playerEntity || playerEntity.heat >= 100) return;
+
+            const stats = calculateMechStats();
+            playerEntity.heat += 15;
+            cameraShake = 0.35;
+
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mousePos, camera);
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -2);
+            const targetPoint = new THREE.Vector3();
+            raycaster.ray.intersectPlane(plane, targetPoint);
+
+            const barrelTips = [];
+            playerEntity.mesh.traverse(child => {
+                if (child.name === "barrelTip") {
+                    const worldPos = new THREE.Vector3();
+                    child.getWorldPosition(worldPos);
+                    barrelTips.push(worldPos);
+                }
+            });
+
+            let spawnPos = playerEntity.mesh.position.clone().add(new THREE.Vector3(0, 2.2, 0));
+            if (barrelTips.length > 0) {
+                activeWeaponBarrelIndex = (activeWeaponBarrelIndex + 1) % barrelTips.length;
+                spawnPos = barrelTips[activeWeaponBarrelIndex];
+            }
+
+            const fireDir = targetPoint.clone().sub(spawnPos).normalize();
+
+            const projGeo = new THREE.CylinderGeometry(0.2, 0.2, 1.8, 8);
+            projGeo.rotateX(Math.PI / 2);
+            const projMat = new THREE.MeshBasicMaterial({ color: GAME_STATE.paint.emissive });
+            const proj = new THREE.Mesh(projGeo, projMat);
+
+            proj.position.copy(spawnPos);
+            proj.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), fireDir);
+
+            projectiles.push({
+                mesh: proj,
+                dir: fireDir,
+                speed: 160,
+                isPlayer: true,
+                damage: stats.damage || 350,
+                life: 2.0
+            });
+
+            scene.add(proj);
+        }
+
+        function updateCombatLoop(delta) {
+            if (!GAME_STATE.inBattle) return;
+
+            const move = new THREE.Vector3();
+            if (keys['KeyW']) move.z -= 1;
+            if (keys['KeyS']) move.z += 1;
+            if (keys['KeyA']) move.x -= 1;
+            if (keys['KeyD']) move.x += 1;
+
+            if (move.length() > 0) {
+                move.normalize();
+                playerEntity.position.addScaledVector(move, playerEntity.speed * delta);
+                
+                playerEntity.walkTimer += delta * 12;
+                const leg0 = playerEntity.mesh.getObjectByName('leg_0');
+                const leg1 = playerEntity.mesh.getObjectByName('leg_1');
+                if (leg0 && leg1) {
+                    leg0.rotation.x = Math.sin(playerEntity.walkTimer) * 0.4;
+                    leg1.rotation.x = -Math.sin(playerEntity.walkTimer) * 0.4;
+                }
+            }
+
+            resolveObstacleCollisions(playerEntity.position, playerEntity.radius);
+            playerEntity.mesh.position.copy(playerEntity.position);
+
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mousePos, camera);
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -2);
+            const targetPoint = new THREE.Vector3();
+            if (raycaster.ray.intersectPlane(plane, targetPoint)) {
+                playerEntity.mesh.lookAt(targetPoint.x, playerEntity.mesh.position.y, targetPoint.z);
+            }
+
+            const heatMult = GAME_STATE.selectedArena === 'volcanic' ? 0.65 : (GAME_STATE.selectedArena === 'wasteland' ? 1.5 : 1.0);
+            playerEntity.heat = Math.max(0, playerEntity.heat - (playerEntity.heatCoolRate * heatMult) * delta);
+
+            if (playerEntity.shield < playerEntity.maxShield) {
+                playerEntity.shield = Math.min(playerEntity.maxShield, playerEntity.shield + 50 * delta);
+            }
+
+            camera.position.set(
+                playerEntity.position.x + (Math.random() - 0.5) * cameraShake,
+                playerEntity.position.y + 12 + (Math.random() - 0.5) * cameraShake,
+                playerEntity.position.z + 20 + (Math.random() - 0.5) * cameraShake
+            );
+            camera.lookAt(playerEntity.position.x, playerEntity.position.y + 2, playerEntity.position.z);
+            cameraShake = Math.max(0, cameraShake - delta * 2);
+
+            // ENEMY AI COMBAT WITH ADVANCED AGGRESSION & FAST ATTACKS
+            enemyEntities.forEach(enemy => {
+                const dist = enemy.position.distanceTo(playerEntity.position);
+
+                if (dist > 18) {
+                    const dir = playerEntity.position.clone().sub(enemy.position).normalize();
+                    enemy.position.addScaledVector(dir, (enemy.isBoss ? 12 : 16) * delta);
+                    enemy.walkTimer += delta * 10;
+
+                    const leg0 = enemy.mesh.getObjectByName('leg_0');
+                    const leg1 = enemy.mesh.getObjectByName('leg_1');
+                    if (leg0 && leg1) {
+                        leg0.rotation.x = Math.sin(enemy.walkTimer) * 0.4;
+                        leg1.rotation.x = -Math.sin(enemy.walkTimer) * 0.4;
+                    }
+                }
+
+                resolveObstacleCollisions(enemy.position, enemy.radius);
+                enemy.mesh.position.copy(enemy.position);
+                enemy.mesh.lookAt(playerEntity.position.x, enemy.mesh.position.y, playerEntity.position.z);
+
+                enemy.cooldown -= delta;
+                if (enemy.cooldown <= 0 && dist < 100) {
+                    enemy.cooldown = enemy.isBoss ? 0.4 : 1.1;
+
+                    const barrelTips = [];
+                    enemy.mesh.traverse(child => {
+                        if (child.name === "barrelTip") {
+                            const wp = new THREE.Vector3();
+                            child.getWorldPosition(wp);
+                            barrelTips.push(wp);
+                        }
+                    });
+
+                    const spawnPoints = barrelTips.length > 0 ? barrelTips : [enemy.position.clone().add(new THREE.Vector3(0, 3, 0))];
+
+                    spawnPoints.forEach(sp => {
+                        const fireDir = playerEntity.position.clone().add(new THREE.Vector3(0, 1.8, 0)).sub(sp).normalize();
+
+                        const eProj = new THREE.Mesh(
+                            new THREE.SphereGeometry(enemy.isBoss ? 0.65 : 0.4, 12, 12),
+                            new THREE.MeshBasicMaterial({ color: 0xff2244 })
+                        );
+                        eProj.position.copy(sp);
+
+                        projectiles.push({
+                            mesh: eProj,
+                            dir: fireDir,
+                            speed: 95,
+                            isPlayer: false,
+                            damage: enemy.damage || 320,
+                            life: 2.5
+                        });
+                        scene.add(eProj);
+                    });
+                }
+            });
+
+            // PROJECTILE TICK & PILLAR COLLISION DETECTOR
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.mesh.position.addScaledVector(p.dir, p.speed * delta);
+                p.life -= delta;
+
+                let hit = false;
+
+                // Solid Pillar Box Collision Check
+                const px = p.mesh.position.x;
+                const pz = p.mesh.position.z;
+                for (const obs of arenaObstacles) {
+                    if (Math.abs(px - obs.pos.x) <= obs.halfSize + 0.2 && Math.abs(pz - obs.pos.z) <= obs.halfSize + 0.2) {
+                        spawnExplosionParticles(p.mesh.position, 0xffaa00);
+                        hit = true;
+                        break;
+                    }
+                }
+
+                if (!hit) {
+                    if (p.isPlayer) {
+                        enemyEntities.forEach(enemy => {
+                            if (!hit && p.mesh.position.distanceTo(enemy.position) < enemy.radius + 0.8) {
+                                applyDamageToEntity(enemy, p.damage, p.mesh.position);
+                                hit = true;
+                            }
+                        });
+                    } else {
+                        if (p.mesh.position.distanceTo(playerEntity.position) < playerEntity.radius + 0.8) {
+                            applyDamageToEntity(playerEntity, p.damage, p.mesh.position);
+                            hit = true;
+                        }
+                    }
+                }
+
+                if (hit || p.life <= 0) {
+                    scene.remove(p.mesh);
+                    projectiles.splice(i, 1);
+                }
+            }
+
+            // CLEANUP DEFEATED ENEMIES & WAVE ADVANCEMENT
+            for (let i = enemyEntities.length - 1; i >= 0; i--) {
+                if (enemyEntities[i].hp <= 0) {
+                    scene.remove(enemyEntities[i].mesh);
+                    enemyEntities.splice(i, 1);
+                    GAME_STATE.survivalEarnings += 500;
+                }
+            }
+
+            if (playerEntity.hp <= 0) {
+                endBattle(false);
+            } else if (enemyEntities.length === 0) {
+                if (GAME_STATE.selectedMode === 'survival') {
+                    GAME_STATE.survivalWave++;
+                    spawnEnemyWave(GAME_STATE.survivalWave);
+                } else {
+                    endBattle(true);
+                }
+            }
+
+            updateBattleHUD();
+        }
+
+        function applyDamageToEntity(entity, damage, hitPos) {
+            if (entity.shield > 0) {
+                if (entity.shield >= damage) {
+                    entity.shield -= damage;
+                    damage = 0;
+                } else {
+                    damage -= entity.shield;
+                    entity.shield = 0;
+                }
+            }
+
+            if (damage > 0) {
+                entity.hp = Math.max(0, entity.hp - damage);
+            }
+
+            spawnExplosionParticles(hitPos, 0xff5500);
+            spawnDamageNumber(Math.ceil(damage), hitPos);
+        }
+
+        function spawnExplosionParticles(pos, colorHex) {
+            for (let i = 0; i < 14; i++) {
+                const particle = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.25, 6, 6),
+                    new THREE.MeshBasicMaterial({ color: colorHex })
+                );
+                particle.position.copy(pos);
+                scene.add(particle);
+
+                particles.push({
+                    mesh: particle,
+                    vel: new THREE.Vector3((Math.random()-0.5)*18, (Math.random()-0.5)*18, (Math.random()-0.5)*18),
+                    life: 0.45
+                });
+            }
+        }
+
+        function spawnDamageNumber(val, pos) {
+            const el = document.createElement('div');
+            el.className = 'dmg-text';
+            el.innerText = val > 0 ? `-${val}` : 'SHIELDED';
+            document.body.appendChild(el);
+
+            const screenPos = pos.clone().project(camera);
+            const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-(screenPos.y * 0.5) + 0.5) * window.innerHeight;
+
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+
+            setTimeout(() => el.remove(), 750);
+        }
+
+        function updateBattleHUD() {
+            if (!playerEntity) return;
+
+            const hpPct = (playerEntity.hp / playerEntity.maxHp) * 100;
+            const shieldPct = (playerEntity.shield / playerEntity.maxShield) * 100;
+
+            document.getElementById('hud-hp-fill').style.width = `${Math.max(0, hpPct)}%`;
+            document.getElementById('hud-hp-val').innerText = `${Math.ceil(playerEntity.hp)} / ${playerEntity.maxHp}`;
+
+            document.getElementById('hud-shield-fill').style.width = `${Math.max(0, shieldPct)}%`;
+            document.getElementById('hud-shield-val').innerText = `${Math.ceil(playerEntity.shield)} / ${playerEntity.maxShield}`;
+
+            document.getElementById('hud-heat-fill').style.width = `${playerEntity.heat}%`;
+            document.getElementById('hud-heat-val').innerText = `${Math.ceil(playerEntity.heat)}%`;
+
+            if (enemyEntities.length > 0) {
+                const target = enemyEntities[0];
+                document.getElementById('hud-target-hp-fill').style.width = `${Math.max(0, (target.hp / target.maxHp) * 100)}%`;
+                document.getElementById('hud-target-hp-val').innerText = `${Math.ceil((target.hp / target.maxHp) * 100)}%`;
+
+                document.getElementById('hud-target-shield-fill').style.width = `${Math.max(0, (target.shield / target.maxShield) * 100)}%`;
+                document.getElementById('hud-target-shield-val').innerText = `${Math.ceil((target.shield / target.maxShield) * 100)}%`;
+            }
+        }
+
+        function endBattle(victory) {
+            GAME_STATE.inBattle = false;
+            document.getElementById('hud-layer').style.display = 'none';
+
+            const modal = document.getElementById('modal-post-battle');
+            const title = document.getElementById('result-title-text');
+            const subtitle = document.getElementById('result-subtitle-text');
+
+            if (victory) {
+                title.innerText = "VICTORY ACHIEVED";
+                title.className = "modal-title victory";
+                subtitle.innerText = "Hostile targets eliminated successfully.";
+
+                const creditBonus = GAME_STATE.selectedMode === 'boss' ? 5000 : 1200;
+                const rpBonus = GAME_STATE.selectedMode === 'boss' ? 400 : 150;
+
+                GAME_STATE.credits += creditBonus;
+                GAME_STATE.rp += rpBonus;
+
+                document.getElementById('rew-credits').innerText = `+${creditBonus.toLocaleString()} CR`;
+                document.getElementById('rew-rp').innerText = `+${rpBonus} RP`;
+            } else {
+                title.innerText = GAME_STATE.selectedMode === 'survival' ? `SURVIVAL OVER` : "CRITICAL FAILURE";
+                title.className = "modal-title defeat";
+                subtitle.innerText = GAME_STATE.selectedMode === 'survival' 
+                    ? `You reached Survival Wave ${GAME_STATE.survivalWave}!` 
+                    : "Chassis destroyed in active combat.";
+
+                const creditBonus = GAME_STATE.survivalEarnings + 200;
+                const rpBonus = GAME_STATE.survivalWave * 40;
+
+                document.getElementById('rew-credits').innerText = `+${creditBonus} CR`;
+                document.getElementById('rew-rp').innerText = `+${rpBonus} RP`;
+                GAME_STATE.credits += creditBonus;
+                GAME_STATE.rp += rpBonus;
+            }
+
+            updateCurrencyUI();
+            modal.classList.add('active');
+        }
+
+        function closePostBattleModal() {
+            document.getElementById('modal-post-battle').classList.remove('active');
+            document.getElementById('main-nav').style.display = 'flex';
+
+            if (playerEntity) scene.remove(playerEntity.mesh);
+            enemyEntities.forEach(e => scene.remove(e.mesh));
+            enemyEntities = [];
+
+            setupGarageEnvironment();
+            updateGarageMechDisplay();
+            switchTab('garage');
+        }
+
+        function abortMission() { endBattle(false); }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updatePrecisionMatrix ? camera.updatePrecisionMatrix() : camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            if (!GAME_STATE.inBattle && garageMechMesh) {
+                garageMechMesh.rotation.y += 0.35 * delta;
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const pt = particles[i];
+                pt.mesh.position.addScaledVector(pt.vel, delta);
+                pt.life -= delta;
+                if (pt.life <= 0) {
+                    scene.remove(pt.mesh);
+                    particles.splice(i, 1);
+                }
+            }
+
+            if (GAME_STATE.inBattle) {
+                updateCombatLoop(delta);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = () => {
+            initGraphicsEngine();
+            selectPartCategory('head');
+            setupColorPickers();
+            renderTechTree();
+            refreshStatsUI();
+            updateCurrencyUI();
+        };
+    </script>
+</body>
+</html>
