@@ -154,6 +154,7 @@
       <label for="username">Select User Identity:</label>
       <input type="text" id="username" value="archivis7" autocomplete="off" spellcheck="false">
       <button id="start-btn" class="start-btn">Begin Game</button>
+      <button id="hub-btn-start" class="secondary-btn" style="margin-top: 4px;">← Back to Arcade Hub</button>
     </div>
   </div>
 
@@ -163,6 +164,7 @@
       <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px;">Your energy core was shattered in combat.</p>
       <button id="respawn-stage-btn" class="start-btn">Respawn at Stage</button>
       <button id="restart-run-btn" class="secondary-btn">Restart Run (Stage 1)</button>
+      <button id="hub-btn-respawn" class="secondary-btn" style="margin-top: 4px;">← Back to Arcade Hub</button>
     </div>
   </div>
 
@@ -265,7 +267,10 @@
       { id: 'fire', title: 'Flame Saber', desc: 'Saber attacks ignite enemies for burning DOT damage.', icon: '🔥', tag: 'ELEMENTAL' },
       { id: 'ice', title: 'Frost Core', desc: 'Saber attacks freeze and slow enemy movement speed.', icon: '❄️', tag: 'ELEMENTAL' },
       { id: 'deflect', title: 'Kinetic Deflect', desc: 'Deflected projectiles deal +100% extra damage.', icon: '🛡️', tag: 'DEFENSE' },
-      { id: 'shield_exp', title: 'Nova Shield', desc: 'Blocking 3 attacks releases a massive pulse explosion.', icon: '💥', tag: 'DEFENSE' }
+      { id: 'shield_exp', title: 'Nova Shield', desc: 'Blocking 3 attacks releases a massive pulse explosion.', icon: '💥', tag: 'DEFENSE' },
+      { id: 'swift_boots', title: 'Swift Boots', desc: 'Move 25% faster and reduce Dash cooldown by 20%.', icon: '👟', tag: 'MOBILITY' },
+      { id: 'phantom', title: 'Phantom Slash', desc: 'Saber strikes have a 30% chance to trigger a phantom echo, striking again for 60% damage.', icon: '👻', tag: 'COMBAT' },
+      { id: 'thorns', title: 'Thorn Armor', desc: 'Taking a hit releases a thorn burst, damaging nearby enemies for 30% of the damage taken.', icon: '🌵', tag: 'DEFENSE' }
     ];
 
     const state = {
@@ -282,7 +287,8 @@
         invulnerableTimer: 0, parryWindowTimer: 0, coyoteTimer: 0, jumpBufferTimer: 0,
         touchingWall: 0,
         combo: 0, comboTimer: 0, comboMaxTime: 3.0,
-        fireSaber: false, iceSaber: false, chainParry: false, deflectionMult: 1.0, shieldExplosion: false, shieldCharge: 0
+        fireSaber: false, iceSaber: false, chainParry: false, deflectionMult: 1.0, shieldExplosion: false, shieldCharge: 0,
+        moveSpeedMult: 1.0, phantomSlash: false, thornArmor: false
       },
       enemies: [], boss: null, projectiles: [], platforms: [], particles: [], fireworks: [], ghostTrails: [], platformMeshes: [], cameraShake: 0, cycleTime: 150
     };
@@ -679,6 +685,7 @@
         p.maxHp = 100; p.hp = 100; p.baseDamage = 1.0; p.critChance = 0.10; p.lifesteal = 0;
         p.maxJumps = 2; p.dashCooldown = 1.2; p.fireSaber = false; p.iceSaber = false;
         p.chainParry = false; p.deflectionMult = 1.0; p.shieldExplosion = false; p.shieldCharge = 0;
+        p.moveSpeedMult = 1.0; p.phantomSlash = false; p.thornArmor = false;
         state.upgradesObtained = [];
         updateUpgradePills();
       } else {
@@ -700,6 +707,13 @@
 
     respawnStageBtn.addEventListener('click', () => respawnPlayer(false));
     restartRunBtn.addEventListener('click', () => respawnPlayer(true));
+
+    document.getElementById('hub-btn-start').addEventListener('click', () => {
+      window.location.href = 'index.html';
+    });
+    document.getElementById('hub-btn-respawn').addEventListener('click', () => {
+      window.location.href = 'index.html';
+    });
 
     // Enemy Mesh Factories
     const matMeleeEnemyArmor = new THREE.MeshStandardMaterial({ color: 0x881337, roughness: 0.3, metalness: 0.6, side: THREE.FrontSide });
@@ -767,6 +781,21 @@
       const visor = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.25), glowMat); visor.position.set(0.15, 1.35, 0); g.add(visor);
       const dagger = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.08), glowMat); dagger.position.set(0.3, 0.7, 0.2); g.add(dagger);
       if (isElite) g.scale.set(1.2, 1.2, 1.2);
+      return g;
+    }
+
+    const matBomberHull = new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.4, metalness: 0.5 });
+    const matBomberFuse = new THREE.MeshStandardMaterial({ color: 0xf97316, emissive: 0xf97316, emissiveIntensity: 3.0 });
+
+    function createBomberMesh(isElite = false) {
+      const g = new THREE.Group();
+      const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 12), matBomberHull); sphere.position.y = 0.65; sphere.castShadow = true; g.add(sphere);
+      const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6), matDarkPlate); fuse.position.set(0.18, 1.25, 0); fuse.rotation.z = -0.35; g.add(fuse);
+      const spark = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), matBomberFuse); spark.position.set(0.30, 1.48, 0); g.add(spark);
+      g.userData.bomberSpark = spark;
+      const bandA = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.05, 8, 16), matBomberFuse); bandA.position.y = 0.45; bandA.rotation.x = Math.PI / 2; g.add(bandA);
+      const bandB = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.05, 8, 16), matBomberFuse); bandB.position.y = 0.85; bandB.rotation.x = Math.PI / 2; g.add(bandB);
+      if (isElite) g.scale.set(1.35, 1.35, 1.35);
       return g;
     }
 
@@ -847,6 +876,51 @@
       return g;
     }
 
+    const matOverlordPlumage = new THREE.MeshStandardMaterial({ color: 0x581c87, roughness: 0.35, metalness: 0.4 });
+    const matOverlordGlow = new THREE.MeshStandardMaterial({ color: 0xea580c, emissive: 0xea580c, emissiveIntensity: 4.0 });
+
+    function createOverlordMesh() {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(1.0, 14, 14), matOverlordPlumage); body.position.y = 2.0; body.scale.set(1.0, 1.15, 1.0); body.castShadow = true; g.add(body);
+      const chest = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 10), matDarkPlate); chest.position.set(0, 1.9, 0.55); g.add(chest);
+      const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 2), matOverlordGlow); core.position.set(0, 1.95, 0.75); g.add(core);
+      g.userData.overlordCore = core;
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 12), matOverlordPlumage); head.position.set(0, 3.35, 0.15); g.add(head);
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.6, 4), matGold); beak.position.set(0, 3.3, 0.55); beak.rotation.x = Math.PI / 2; g.add(beak);
+      const eyeMat = new THREE.MeshStandardMaterial({ color: 0xea580c, emissive: 0xea580c, emissiveIntensity: 5.0 });
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), eyeMat); eyeL.position.set(0.18, 3.45, 0.4); g.add(eyeL);
+      const eyeR = eyeL.clone(); eyeR.position.x = -0.18; g.add(eyeR);
+      const crest = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.7, 4), matOverlordGlow); crest.position.set(0, 3.9, 0); crest.rotation.x = -0.4; g.add(crest);
+
+      const wings = [];
+      for (let i = 0; i < 2; i++) {
+        const wing = new THREE.Group();
+        const wingMat = new THREE.MeshStandardMaterial({ color: 0x4c1d95, roughness: 0.4, side: THREE.DoubleSide });
+        const s = new THREE.Shape();
+        s.moveTo(0, 0); s.lineTo(1.6, 0.5); s.lineTo(1.9, -0.3); s.lineTo(0.8, -0.8); s.closePath();
+        const wm = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.05, bevelEnabled: false }), wingMat);
+        wing.add(wm);
+        const side = i === 0 ? 1 : -1;
+        wing.position.set(side * 0.8, 2.4, 0);
+        wing.scale.x = side;
+        g.add(wing);
+        wings.push(wing);
+      }
+      g.userData.wings = wings;
+
+      const talonL = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.6, 4), matGold); talonL.position.set(0.3, 0.5, 0.2); talonL.rotation.x = Math.PI; g.add(talonL);
+      const talonR = talonL.clone(); talonR.position.x = -0.3; g.add(talonR);
+
+      const halo = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.07, 10, 32), matShieldEmblem);
+      halo.rotation.x = Math.PI / 2; halo.position.y = 2.0; g.add(halo);
+      g.userData.halo = halo;
+
+      const olLight = new THREE.PointLight(0xea580c, 3.0, 12);
+      olLight.position.set(0, 2.5, 0); g.add(olLight);
+      return g;
+    }
+
     function buildLevel(num) {
       selectRandomSong();
       state.platformMeshes.forEach(m => scene.remove(m)); state.platformMeshes = []; state.platforms = [];
@@ -857,14 +931,17 @@
       const bossHud = document.getElementById('boss-hud');
       const bossTitle = document.getElementById('boss-title');
 
-      if (num === 5 || num === 8) {
+      if (num === 5 || num === 8 || num === 12) {
         bossHud.style.display = 'block';
         if (num === 5) {
           bossTitle.textContent = "LEVEL 5 BOSS: VOID DREADNOUGHT";
           bossTitle.style.color = "#ec4899";
-        } else {
+        } else if (num === 8) {
           bossTitle.textContent = "LEVEL 8 BOSS: EVIL LICH KING";
           bossTitle.style.color = "#22c55e";
+        } else {
+          bossTitle.textContent = "LEVEL 12 BOSS: CORVID OVERLORD";
+          bossTitle.style.color = "#ea580c";
         }
       } else {
         bossHud.style.display = 'none';
@@ -879,6 +956,9 @@
       } else if (num === 8) {
         const bg = createLichKingMesh(); bg.position.set(18, 0, 0); scene.add(bg);
         state.boss = { group: bg, x: 18, y: 0, vx: -4.0, w: 2.5, h: 3.8, hp: 100, maxHp: 100, shootTimer: 0, phase: 1, attackCooldown: 0, alive: true, type: 'lich', darknessMode: false };
+      } else if (num === 12) {
+        const bg = createOverlordMesh(); bg.position.set(20, 0, 0); scene.add(bg);
+        state.boss = { group: bg, x: 20, y: 0, vx: -4.5, w: 2.6, h: 4.0, hp: 150, maxHp: 150, shootTimer: 0, phase: 1, attackCooldown: 0, alive: true, type: 'overlord', featherStormTimer: 8 };
       } else {
         const platformCount = 6 + (num % 4);
         for (let i = 0; i < platformCount; i++) {
@@ -899,8 +979,10 @@
             type = 'ranged'; g = createDetailedRangedMesh(isElite);
           } else if (typeRoll < 0.70) {
             type = 'shield'; g = createShieldEnemyMesh(isElite);
-          } else if (typeRoll < 0.88) {
+          } else if (typeRoll < 0.86) {
             type = 'assassin'; g = createAssassinMesh(isElite);
+          } else if (typeRoll < 0.94) {
+            type = 'bomber'; g = createBomberMesh(isElite);
           } else {
             type = 'berserker'; g = createDetailedMeleeMesh(isElite, true);
           }
@@ -908,11 +990,11 @@
           const ex = -groundWidth/2 + 15 + Math.random() * (groundWidth - 30);
           g.position.set(ex, 0, 0); scene.add(g);
 
-          let hpVal = type === 'shield' ? 6 : (type === 'assassin' ? 3 : (type === 'ranged' ? 4 : (type === 'berserker' ? 8 : 5)));
+          let hpVal = type === 'shield' ? 6 : (type === 'assassin' ? 3 : (type === 'ranged' ? 4 : (type === 'berserker' ? 8 : (type === 'bomber' ? 2 : 5))));
           if (isElite) hpVal *= 2.2;
 
           state.enemies.push({
-            group: g, x: ex, y: 0, vx: type === 'assassin' ? 5.5 : (type === 'berserker' ? 4.5 : 2.5), w: 0.8, h: 1.6,
+            group: g, x: ex, y: 0, vx: type === 'assassin' ? 5.5 : (type === 'berserker' ? 4.5 : (type === 'bomber' ? 4.0 : 2.5)), w: 0.8, h: 1.6,
             hp: hpVal, maxHp: hpVal, patrolLeft: ex - 8, patrolRight: ex + 8,
             type, isElite, shootTimer: Math.random() * 2, alive: true, frozenTimer: 0, fireDotTimer: 0, dodgeCD: 0
           });
@@ -967,7 +1049,7 @@
       const container = document.getElementById('upgrade-options');
       container.innerHTML = '';
 
-      const singlePickIds = ['triple_jump', 'chain_parry', 'fire', 'ice', 'shield_exp'];
+      const singlePickIds = ['triple_jump', 'chain_parry', 'fire', 'ice', 'shield_exp', 'swift_boots', 'phantom', 'thorns'];
       const obtainedIds = state.upgradesObtained.map(u => u.id);
 
       let availablePool = ALL_UPGRADES.filter(u => {
@@ -1028,6 +1110,9 @@
         case 'ice': p.iceSaber = true; break;
         case 'deflect': p.deflectionMult += 1.0; break;
         case 'shield_exp': p.shieldExplosion = true; break;
+        case 'swift_boots': p.moveSpeedMult = 1.25; p.dashCooldown *= 0.80; break;
+        case 'phantom': p.phantomSlash = true; break;
+        case 'thorns': p.thornArmor = true; break;
       }
       updateUpgradePills();
       updateUIStats();
@@ -1051,7 +1136,9 @@
       m.position.set(x, y, 0);
       scene.add(m); 
       const dir = tx > x ? 1 : -1;
-      state.projectiles.push({ mesh: m, x, y, vx: dir * speed, life: 3.5, deflected: false });
+      const projectile = { mesh: m, x, y, vx: dir * speed, life: 3.5, deflected: false };
+      state.projectiles.push(projectile);
+      return projectile;
     }
 
     function createSlashParticles(x,y,c=0x38bdf8, count=16){
@@ -1082,6 +1169,23 @@
           state.boss.hp -= 20 * p.baseDamage;
           if (state.boss.hp <= 0) { state.boss.alive = false; scene.remove(state.boss.group); updateEnemyCountUI(); }
         }
+      }
+    }
+
+    function handleThornBurst(dmgTaken) {
+      const p = state.player;
+      if (!p.thornArmor || dmgTaken <= 0) return;
+      createSlashParticles(p.x, p.y + 1, 0x22c55e, 22);
+      spawnFloatingText('THORNS!', p.x, p.y + 1.8, 'heal');
+      state.enemies.forEach(en => {
+        if (en.alive && Math.abs(en.x - p.x) < 3.5) {
+          en.hp -= dmgTaken * 0.30;
+          if (en.hp <= 0) { en.alive = false; scene.remove(en.group); updateEnemyCountUI(); }
+        }
+      });
+      if (state.boss && state.boss.alive && Math.abs(state.boss.x - p.x) < 4.0) {
+        state.boss.hp -= dmgTaken * 0.30;
+        if (state.boss.hp <= 0) { state.boss.alive = false; scene.remove(state.boss.group); updateEnemyCountUI(); }
       }
     }
 
@@ -1248,6 +1352,26 @@
         }
       });
 
+      // Phantom Slash Echo
+      if (p.phantomSlash && hitOccurred && Math.random() < 0.30) {
+        createSlashParticles(slashX, p.y + 1, 0x38bdf8, 20);
+        spawnFloatingText('PHANTOM!', slashX, p.y + 2.2, 'parry');
+        if (state.boss && state.boss.alive && Math.abs(state.boss.x - slashX) < 3.8 && Math.abs((state.boss.y + 1.5) - (p.y + 1)) < 2.5) {
+          const echoDmg = finalDmg * 0.6;
+          state.boss.hp -= echoDmg;
+          registerHitCombo(echoDmg, false, { x: state.boss.x, y: state.boss.y + 2.0 }, 'ice');
+          if (state.boss.hp <= 0) { state.boss.alive = false; scene.remove(state.boss.group); updateEnemyCountUI(); }
+        }
+        state.enemies.forEach(en => {
+          if (!en.alive) return;
+          if (Math.abs(en.x - slashX) < 2.8 && Math.abs((en.y + en.h / 2) - (p.y + 1)) < 1.8) {
+            en.hp -= finalDmg * 0.6;
+            createSlashParticles(en.x, en.y + 1, 0x38bdf8, 10);
+            if (en.hp <= 0) { en.alive = false; scene.remove(en.group); updateEnemyCountUI(); }
+          }
+        });
+      }
+
       if (hitOccurred) {
         state.hitStopTimer = isCharged ? 0.08 : 0.04;
       }
@@ -1388,8 +1512,8 @@
 
       if (!p.isDashing) {
         p.vx = 0;
-        if (keys['KeyA'] || keys['ArrowLeft']) { p.vx = -MOVE_SPEED; p.facingRight = false; }
-        if (keys['KeyD'] || keys['ArrowRight']) { p.vx = MOVE_SPEED; p.facingRight = true; }
+        if (keys['KeyA'] || keys['ArrowLeft']) { p.vx = -MOVE_SPEED * p.moveSpeedMult; p.facingRight = false; }
+        if (keys['KeyD'] || keys['ArrowRight']) { p.vx = MOVE_SPEED * p.moveSpeedMult; p.facingRight = true; }
       }
       p.x += p.vx * dt;
 
@@ -1560,6 +1684,49 @@
               createSlashParticles(b.x, b.y + 2.0, 0x22c55e, 20);
             }
           }
+        } else if (b.type === 'overlord') {
+          const hpRatio = b.hp / b.maxHp;
+          if (hpRatio < 0.33) b.phase = 3;
+          else if (hpRatio < 0.66) b.phase = 2;
+
+          // Wing flap, halo spin, core pulse
+          if (b.group.userData.wings) {
+            b.group.userData.wings.forEach((wing, i) => {
+              wing.rotation.z = Math.sin(time * 7) * 0.5 * (i === 0 ? 1 : -1);
+            });
+          }
+          if (b.group.userData.halo) b.group.userData.halo.rotation.z += dt * 4;
+          if (b.group.userData.overlordCore) b.group.userData.overlordCore.rotation.y += dt * 5;
+
+          // Hovering drift
+          b.x += b.vx * dt; if (b.x > 24 || b.x < -24) b.vx *= -1;
+          b.y = Math.sin(time * 2.2) * 1.2;
+          b.group.position.set(b.x, b.y, 0);
+
+          const shootDelay = b.phase === 3 ? 0.6 : (b.phase === 2 ? 0.9 : 1.2);
+          if (b.shootTimer >= shootDelay) {
+            b.shootTimer = 0;
+            spawnRangedProjectile(b.x, b.y + 3.2, p.x, 0xea580c, 16);
+            if (b.phase >= 2) {
+              spawnRangedProjectile(b.x + 0.8, b.y + 3.0, p.x + 1.5, 0xf97316, 14);
+              spawnRangedProjectile(b.x - 0.8, b.y + 3.0, p.x - 1.5, 0xf97316, 14);
+            }
+          }
+
+          // Feather Storm: radial burst on a cycle
+          b.featherStormTimer -= dt;
+          if (b.featherStormTimer <= 0) {
+            b.featherStormTimer = b.phase === 3 ? 3.5 : (b.phase === 2 ? 5 : 7);
+            const count = b.phase === 3 ? 16 : (b.phase === 2 ? 12 : 8);
+            for (let i = 0; i < count; i++) {
+              const a = (i / count) * Math.PI * 2 + time;
+              const pr = spawnRangedProjectile(b.x, b.y + 2.2, p.x, 0xc084fc, 10);
+              pr.vx = Math.cos(a) * 9;
+              pr.life = 2.5;
+            }
+            triggerScreenFlash('rgba(192, 132, 252, 0.25)', 0.18);
+            spawnFloatingText('FEATHER STORM!', b.x, b.y + 4.5, 'parry');
+          }
         }
 
         // Damage Collision with Boss
@@ -1574,6 +1741,7 @@
             const dmg = p.blocking ? baseDmg * 0.5 : baseDmg;
             if (p.blocking) handleShieldBlockImpact();
             p.hp -= dmg; p.invulnerableTimer = 1.2; p.vy = 8; p.vx = b.vx > 0 ? 7 : -7; 
+            handleThornBurst(dmg);
             createSlashParticles(p.x, p.y + 1.0, p.blocking ? 0x38bdf8 : 0xef4444); 
           }
         }
@@ -1611,6 +1779,45 @@
         en.group.rotation.y = THREE.MathUtils.lerp(en.group.rotation.y, en.vx > 0 ? 0 : Math.PI, 14 * dt);
         
         if (en.type === 'ranged' && (en.shootTimer += dt) >= 2.2) { en.shootTimer = 0; spawnRangedProjectile(en.x, en.y + 1.2, p.x); } 
+
+        // Bomber: relentless pursuit, detonation on contact
+        if (en.type === 'bomber') {
+          if (en.group.userData.bomberSpark) {
+            const sp = 0.8 + Math.abs(Math.sin(time * 18)) * 0.7;
+            en.group.userData.bomberSpark.scale.set(sp, sp, sp);
+          }
+          en.vx = (p.x > en.x ? 1 : -1) * 6.0;
+          en.patrolLeft = -1e9; en.patrolRight = 1e9;
+          if (Math.hypot(en.x - p.x, (en.y + 0.8) - (p.y + 0.8)) < 1.0 && p.invulnerableTimer <= 0) {
+            if (p.parryWindowTimer > 0) {
+              en.vx = (p.facingRight ? 1 : -1) * 9.0;
+              en.patrolLeft = en.x + (p.facingRight ? 1 : -1) * 20;
+              en.patrolRight = en.patrolLeft;
+              en.frozenTimer = 1.0;
+              spawnFloatingText('KICKED!', en.x, en.y + 1.4, 'parry');
+              triggerScreenFlash('rgba(56, 189, 248, 0.6)', 0.15);
+              en.hp -= 10 * p.baseDamage;
+              if (en.hp <= 0) { en.alive = false; scene.remove(en.group); updateEnemyCountUI(); }
+              return;
+            } else {
+              const dmg = 34;
+              p.hp -= dmg; p.invulnerableTimer = 1.2; p.vy = 9; p.vx = (p.x < en.x ? -1 : 1) * 8;
+              handleThornBurst(dmg);
+              createSlashParticles(p.x, p.y + 1.0, 0xf97316, 30);
+              triggerScreenFlash('rgba(249, 115, 22, 0.45)', 0.2);
+              state.cameraShake = 0.4;
+              state.enemies.forEach(other => {
+                if (other !== en && other.alive && Math.abs(other.x - en.x) < 3.0) {
+                  other.hp -= 18;
+                  if (other.hp <= 0) { other.alive = false; scene.remove(other.group); }
+                }
+              });
+              en.alive = false; scene.remove(en.group); updateEnemyCountUI();
+              return;
+            }
+          }
+        }
+
         if (Math.hypot(en.x - p.x, (en.y+0.8) - (p.y+0.8)) < 1.1 && p.invulnerableTimer <= 0) { 
           if (p.parryWindowTimer > 0) {
             p.invulnerableTimer = 0.4;
@@ -1623,6 +1830,7 @@
             const dmg = p.blocking ? baseDmg * 0.5 : baseDmg;
             if (p.blocking) handleShieldBlockImpact();
             p.hp -= dmg; p.invulnerableTimer = 1.2; p.vy = 6; p.vx = en.vx > 0 ? 5 : -5; 
+            handleThornBurst(dmg);
             createSlashParticles(p.x, p.y + 1.0, p.blocking ? 0x38bdf8 : 0xef4444); 
           }
         } 
@@ -1660,6 +1868,7 @@
               const dmg = p.blocking ? baseDmg * 0.5 : baseDmg;
               if (p.blocking) handleShieldBlockImpact();
               p.hp -= dmg; p.invulnerableTimer = 1.0; 
+              handleThornBurst(dmg);
               createSlashParticles(p.x, p.y + 1.0, p.blocking ? 0x38bdf8 : 0xc084fc); 
               safeRemove(pr.mesh); state.projectiles.splice(i, 1); continue; 
             }
