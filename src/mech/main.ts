@@ -143,6 +143,7 @@ interface ComboPurpleState {
     timer: number;
 }
 let gojoComboPurple: ComboPurpleState | null = null;
+const COMBO_PURPLE_CHARGE = 4.0;
 let gojoMaxOutput = false;
 let purpleAudio: HTMLAudioElement | null = null;
 let gojoTimers = { blue: 0, red: 0, purple: 0, domain: 0 };
@@ -3973,7 +3974,7 @@ let fxaaPass: ShaderPass | null = null;
             const assets = getHollowPurpleAssets();
             const group = new THREE.Group();
             group.position.copy(at);
-            group.scale.setScalar(3);
+            group.scale.setScalar(3 * 0.3);
             const core = new THREE.Mesh(assets.coreGeo, assets.coreMat);
             const shell = new THREE.Mesh(assets.shellGeo, assets.shellMat);
             const ringA = new THREE.Mesh(assets.ringGeoA, assets.ringMatA);
@@ -3985,7 +3986,7 @@ let fxaaPass: ShaderPass | null = null;
             assets.shellMat.uniforms.uFade.value = 1;
             assets.ringMatA.opacity = 0.9;
             assets.ringMatB.opacity = 0.7;
-            gojoComboPurple = { group, core, shell, ringA, ringB, pos: at.clone(), timer: 0.55 };
+            gojoComboPurple = { group, core, shell, ringA, ringB, pos: at.clone(), timer: COMBO_PURPLE_CHARGE };
             playPurpleTheme();
             showFloatText('MAXIMUM OUTPUT — BLUE + RED: HOLLOW PURPLE', '#f0abfc');
             cameraShake = Math.max(cameraShake, 0.4);
@@ -4054,8 +4055,23 @@ let fxaaPass: ShaderPass | null = null;
             combo.core.rotation.y += delta * 4;
             combo.ringA.rotation.z += delta * 8;
             combo.ringB.rotation.x += delta * 10;
-            combo.group.scale.setScalar(3 * (1 + Math.sin(clock.elapsedTime * 9) * 0.05));
-            if (combo.timer <= 0) detonateMaxComboPurple();
+
+            // The blast waits for the four-second mark in purple.mp3. If the
+            // browser blocks audio, the charge timer keeps the same timing.
+            const audio = purpleAudio;
+            const audioPlaying = !!audio && !audio.paused && !audio.ended;
+            const audioTime = audioPlaying && Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+            const fallbackTime = COMBO_PURPLE_CHARGE - combo.timer;
+            const chargeTime = Math.min(COMBO_PURPLE_CHARGE, Math.max(fallbackTime, audioTime));
+            const progress = THREE.MathUtils.clamp(chargeTime / COMBO_PURPLE_CHARGE, 0, 1);
+            const ease = 1 - Math.pow(1 - progress, 2);
+            const pulse = 1 + Math.sin(clock.elapsedTime * (5 + progress * 9)) * (0.055 - progress * 0.025);
+            combo.group.scale.setScalar(3 * (0.3 + 0.7 * ease) * pulse);
+
+            const audioDrop = audioPlaying && audioTime >= COMBO_PURPLE_CHARGE;
+            const fallbackDrop = !audioPlaying && combo.timer <= 0;
+            const stalledAudio = audioPlaying && combo.timer <= -COMBO_PURPLE_CHARGE;
+            if (audioDrop || fallbackDrop || stalledAudio) detonateMaxComboPurple();
         }
 
         /* =========================================================================

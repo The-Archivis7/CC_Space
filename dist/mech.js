@@ -25855,6 +25855,7 @@
   var gojoDomain = null;
   var gojoPurple = null;
   var gojoComboPurple = null;
+  var COMBO_PURPLE_CHARGE = 4;
   var gojoMaxOutput = false;
   var purpleAudio = null;
   var gojoTimers = { blue: 0, red: 0, purple: 0, domain: 0 };
@@ -29464,7 +29465,7 @@
     const assets = getHollowPurpleAssets();
     const group = new Group();
     group.position.copy(at);
-    group.scale.setScalar(3);
+    group.scale.setScalar(3 * 0.3);
     const core = new Mesh(assets.coreGeo, assets.coreMat);
     const shell = new Mesh(assets.shellGeo, assets.shellMat);
     const ringA = new Mesh(assets.ringGeoA, assets.ringMatA);
@@ -29476,7 +29477,7 @@
     assets.shellMat.uniforms.uFade.value = 1;
     assets.ringMatA.opacity = 0.9;
     assets.ringMatB.opacity = 0.7;
-    gojoComboPurple = { group, core, shell, ringA, ringB, pos: at.clone(), timer: 0.55 };
+    gojoComboPurple = { group, core, shell, ringA, ringB, pos: at.clone(), timer: COMBO_PURPLE_CHARGE };
     playPurpleTheme();
     showFloatText("MAXIMUM OUTPUT \u2014 BLUE + RED: HOLLOW PURPLE", "#f0abfc");
     cameraShake = Math.max(cameraShake, 0.4);
@@ -29550,8 +29551,19 @@
     combo.core.rotation.y += delta * 4;
     combo.ringA.rotation.z += delta * 8;
     combo.ringB.rotation.x += delta * 10;
-    combo.group.scale.setScalar(3 * (1 + Math.sin(clock.elapsedTime * 9) * 0.05));
-    if (combo.timer <= 0) detonateMaxComboPurple();
+    const audio = purpleAudio;
+    const audioPlaying = !!audio && !audio.paused && !audio.ended;
+    const audioTime = audioPlaying && Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+    const fallbackTime = COMBO_PURPLE_CHARGE - combo.timer;
+    const chargeTime = Math.min(COMBO_PURPLE_CHARGE, Math.max(fallbackTime, audioTime));
+    const progress = MathUtils.clamp(chargeTime / COMBO_PURPLE_CHARGE, 0, 1);
+    const ease = 1 - Math.pow(1 - progress, 2);
+    const pulse = 1 + Math.sin(clock.elapsedTime * (5 + progress * 9)) * (0.055 - progress * 0.025);
+    combo.group.scale.setScalar(3 * (0.3 + 0.7 * ease) * pulse);
+    const audioDrop = audioPlaying && audioTime >= COMBO_PURPLE_CHARGE;
+    const fallbackDrop = !audioPlaying && combo.timer <= 0;
+    const stalledAudio = audioPlaying && combo.timer <= -COMBO_PURPLE_CHARGE;
+    if (audioDrop || fallbackDrop || stalledAudio) detonateMaxComboPurple();
   }
   function getZoltraakSigilTexture() {
     if (!zoltraakSigilRequested) {
