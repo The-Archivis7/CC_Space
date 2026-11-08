@@ -25861,7 +25861,14 @@
   var frierenBeam = null;
   var frierenFrontShield = null;
   var frierenSphereShield = null;
-  var frierenTimers = { zoltraak: 0, shield: 0, sphere: 0 };
+  var frierenTimers = { zoltraak: 0, shield: 0, sphere: 0, catastravia: 0, rapidZoltraak: 0, judradjim: 0 };
+  var frierenRapidMode = null;
+  var judradjimBolts = [];
+  var frierenRapidNextShot = 0;
+  var frierenRapidSide = 1;
+  var frierenRapidShots = [];
+  var catastraviaStarTexture = null;
+  var rapidBeamGeometry = null;
   var zoltraakSigilTex = null;
   var zoltraakSigilRequested = false;
   var bossThemeAudio = null;
@@ -26051,6 +26058,18 @@
         noise(0.42, 0.22, 7200);
         tone(88, 0.34, "sine", 0.18, 42);
         break;
+      case "catastravia":
+        tone(1560, 0.055, "triangle", 0.045, 2400);
+        tone(2360, 0.045, "sine", 0.03, 3100);
+        break;
+      case "rapidzoltraak":
+        tone(2050, 0.05, "sawtooth", 0.035, 980);
+        break;
+      case "judradjim":
+        noise(0.5, 0.3, 5200);
+        tone(120, 0.45, "sawtooth", 0.16, 38);
+        tone(980, 0.22, "square", 0.05, 140);
+        break;
       case "shield":
         tone(520, 0.22, "triangle", 0.09, 880);
         tone(780, 0.28, "sine", 0.07, 1170);
@@ -26128,6 +26147,11 @@
   }
   function startBossTheme() {
     stopMusic();
+    if (isGojo()) {
+      stopBossTheme();
+      startMusic();
+      return;
+    }
     if (!bossThemeAudio) {
       bossThemeAudio = new Audio("assets/songs/zoltraak.mp3");
       bossThemeAudio.loop = true;
@@ -26152,7 +26176,7 @@
     AudioSys.muted = !AudioSys.muted;
     if (AudioSys.master) AudioSys.master.gain.value = AudioSys.muted ? 0 : 0.55;
     if (bossThemeAudio) bossThemeAudio.muted = AudioSys.muted;
-    if (!AudioSys.muted && GAME_STATE.inBattle && GAME_STATE.selectedMode === "boss" && bossThemeAudio) {
+    if (!isGojo() && !AudioSys.muted && GAME_STATE.inBattle && GAME_STATE.selectedMode === "boss" && bossThemeAudio) {
       bossThemeAudio.play().catch(() => {
       });
     }
@@ -26930,7 +26954,10 @@
   var FRIEREN_TECHNIQUES = [
     { id: "spell_zoltraak", name: "Zoltraak", desc: "Key 1 or LMB \u2014 a piercing white annihilation beam that tears through everything in its path.", color: 16120831 },
     { id: "spell_hex_shield", name: "Hex Shield", desc: "Key 2 \u2014 raise a forward wall of translucent blue hexagons that absorbs incoming fire.", color: 5556479 },
-    { id: "spell_sphere_shield", name: "Spherical Hex Shield", desc: "Key 3 \u2014 seal yourself inside a rotating sphere of blue hexagons and blunt all damage.", color: 2989311 }
+    { id: "spell_sphere_shield", name: "Spherical Hex Shield", desc: "Key 3 \u2014 seal yourself inside a rotating sphere of blue hexagons and blunt all damage.", color: 2989311 },
+    { id: "spell_catastravia", name: "Catastravia", desc: "Key 4 (hold) \u2014 rapid-fire golden star beams that shred a single target.", color: 16765770 },
+    { id: "spell_rapid_zoltraak", name: "Rapid Zoltraak", desc: "Key 5 (hold) \u2014 a quick stream of weaker white beams that still pierces everything in line.", color: 16777215 },
+    { id: "spell_judradjim", name: "Judradjim", desc: "Key 6 \u2014 call down purple lightning that arcs through nearby enemies.", color: 11032055 }
   ];
   var FRIEREN_STATS = { hp: 10500, shield: 11e3, energy: 850, speed: 98, heatCool: 180, damage: 6e3 };
   var FRIEREN_PAINT = { primary: 14412020, secondary: 4169215, emissive: 11070719 };
@@ -28168,9 +28195,17 @@
         if (e.code === "Digit1" || e.code === "Numpad1") castZoltraak();
         else if (e.code === "Digit2" || e.code === "Numpad2") castFrierenHexShield();
         else if (e.code === "Digit3" || e.code === "Numpad3") castFrierenSphereShield();
+        else if (e.code === "Digit4" || e.code === "Numpad4") beginFrierenRapid("catastravia");
+        else if (e.code === "Digit5" || e.code === "Numpad5") beginFrierenRapid("rapidZoltraak");
+        else if (e.code === "Digit6" || e.code === "Numpad6") castJudradjim();
       }
     });
-    window.addEventListener("keyup", (e) => keys[e.code] = false);
+    window.addEventListener("keyup", (e) => {
+      keys[e.code] = false;
+      if (!isFrieren()) return;
+      if (e.code === "Digit4" || e.code === "Numpad4") stopFrierenRapid("catastravia");
+      else if (e.code === "Digit5" || e.code === "Numpad5") stopFrierenRapid("rapidZoltraak");
+    });
     window.addEventListener("mousemove", (e) => {
       if (firstPersonView) {
         let dx = 0, dy = 0;
@@ -28204,6 +28239,7 @@
     window.addEventListener("blur", () => {
       mouseDown = false;
       keys = {};
+      stopFrierenRapid();
     });
     document.addEventListener("pointerlockchange", () => {
       const locked = document.pointerLockElement === renderer.domElement;
@@ -29463,6 +29499,22 @@
     }
     return target;
   }
+  function frierenNearestTargetInCone(maxDist, minDot) {
+    if (!playerEntity) return null;
+    const eye = playerEntity.position.clone().setY(firstPersonView ? 4.95 : 4.2);
+    const aim = frierenAimDir();
+    let target = null, best = maxDist;
+    for (const e of enemyEntities) {
+      const center = e.position.clone().setY(2.7 * e.scale);
+      const to = center.clone().sub(eye);
+      const dist = to.length();
+      if (dist <= 1e-3 || dist >= best) continue;
+      if (to.normalize().dot(aim) < minDot) continue;
+      best = dist;
+      target = e;
+    }
+    return target;
+  }
   function frierenAimDir() {
     if (!playerEntity) return new Vector3(0, 0, -1);
     const eye = playerEntity.position.clone().setY(4.2);
@@ -29588,6 +29640,400 @@
         sig.sprite.material.dispose();
       }
       frierenBeam = null;
+    }
+  }
+  var FRIEREN_RAPID_CONFIG = {
+    catastravia: {
+      label: "CATASTRAVIA",
+      damage: 1050,
+      interval: 0.13,
+      range: 195,
+      cooldown: 3,
+      coreColor: 16761370,
+      glowColor: 16747008,
+      starColor: 16765770
+    },
+    rapidZoltraak: {
+      label: "RAPID ZOLTRAAK",
+      damage: 1450,
+      interval: 0.18,
+      range: 220,
+      cooldown: 2.2,
+      coreColor: 16777215,
+      glowColor: 9431295,
+      starColor: 14678015
+    }
+  };
+  function getCatastraviaStarTexture() {
+    if (catastraviaStarTexture) return catastraviaStarTexture;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    ctx.translate(64, 64);
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 62);
+    glow.addColorStop(0, "rgba(255,255,235,1)");
+    glow.addColorStop(0.24, "rgba(255,226,105,0.9)");
+    glow.addColorStop(0.58, "rgba(255,174,24,0.34)");
+    glow.addColorStop(1, "rgba(255,142,0,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(-64, -64, 128, 128);
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const angle = -Math.PI / 2 + i * Math.PI / 5;
+      const radius = i % 2 === 0 ? 44 : 18;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "rgba(255,248,188,1)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,214,78,0.95)";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    catastraviaStarTexture = new CanvasTexture(canvas);
+    catastraviaStarTexture.minFilter = LinearFilter;
+    catastraviaStarTexture.magFilter = LinearFilter;
+    return catastraviaStarTexture;
+  }
+  function makeCatastraviaStar(scale, opacity) {
+    const mat = new SpriteMaterial({
+      map: getCatastraviaStarTexture(),
+      color: 16761370,
+      transparent: true,
+      opacity,
+      blending: NormalBlending,
+      depthWrite: false,
+      depthTest: false
+    });
+    const sprite = new Sprite(mat);
+    sprite.scale.set(scale, scale, 1);
+    sprite.renderOrder = 7;
+    return sprite;
+  }
+  function getRapidBeamGeometry() {
+    if (!rapidBeamGeometry) rapidBeamGeometry = new CylinderGeometry(1, 1, 1, 8, 1, true);
+    return rapidBeamGeometry;
+  }
+  function spawnFrierenRapidVisual(mode, eye, dir, length) {
+    const cfg = FRIEREN_RAPID_CONFIG[mode];
+    const isCatastravia = mode === "catastravia";
+    const group = new Group();
+    group.position.copy(eye);
+    group.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), dir);
+    const coreMat = new MeshBasicMaterial({
+      color: cfg.coreColor,
+      transparent: true,
+      opacity: 0.95,
+      blending: isCatastravia ? NormalBlending : AdditiveBlending,
+      depthWrite: false
+    });
+    const glowMat = new MeshBasicMaterial({
+      color: cfg.glowColor,
+      transparent: true,
+      opacity: isCatastravia ? 0.2 : 0.15,
+      blending: AdditiveBlending,
+      depthWrite: false
+    });
+    const geometry = getRapidBeamGeometry();
+    const core = new Mesh(geometry, coreMat);
+    core.rotation.x = Math.PI / 2;
+    core.position.z = length / 2;
+    core.scale.set(isCatastravia ? 0.22 : 0.18, length, isCatastravia ? 0.22 : 0.18);
+    group.add(core);
+    const glow = new Mesh(geometry, glowMat);
+    glow.rotation.x = Math.PI / 2;
+    glow.position.z = length / 2;
+    glow.scale.set(isCatastravia ? 0.75 : 0.58, length, isCatastravia ? 0.75 : 0.58);
+    group.add(glow);
+    const stars = [];
+    if (isCatastravia) {
+      const muzzle = makeCatastraviaStar(1.7, 0.9);
+      muzzle.position.set(frierenRapidSide * 0.62, -0.16, 4.2);
+      group.add(muzzle);
+      stars.push({ sprite: muzzle, baseOpacity: 0.9 });
+      const impact = makeCatastraviaStar(1.45, 0.82);
+      impact.position.set(0, 0, length);
+      group.add(impact);
+      stars.push({ sprite: impact, baseOpacity: 0.82 });
+    } else {
+      const muzzle = makeZoltraakSigil(1.75, 0.4);
+      if (muzzle) {
+        muzzle.position.set(frierenRapidSide * 0.35, -0.08, 4);
+        group.add(muzzle);
+        stars.push({ sprite: muzzle, baseOpacity: 0.4 });
+      }
+      const impact = makeZoltraakSigil(1.3, 0.32);
+      if (impact) {
+        impact.position.set(0, 0, length);
+        group.add(impact);
+        stars.push({ sprite: impact, baseOpacity: 0.32 });
+      }
+    }
+    const life = isCatastravia ? 0.32 : 0.24;
+    scene.add(group);
+    frierenRapidShots.push({ group, life, maxLife: life, coreMat, glowMat, stars });
+  }
+  function fireFrierenRapidShot() {
+    if (!playerEntity || !frierenRapidMode) return;
+    const mode = frierenRapidMode;
+    const cfg = FRIEREN_RAPID_CONFIG[mode];
+    const eye = playerEntity.position.clone().setY(firstPersonView ? 4.95 : 4.2);
+    const target = frierenNearestTargetInCone(cfg.range, 0.35);
+    let aim = getAimPoint();
+    if (target) aim = target.position.clone().setY(2.7 * target.scale);
+    const dir = aim.clone().sub(eye);
+    if (dir.lengthSq() < 1e-3) dir.set(0, 0, -1);
+    dir.normalize();
+    const length = Math.max(3, Math.min(cfg.range, eye.distanceTo(aim)));
+    const end = eye.clone().addScaledVector(dir, length);
+    frierenRapidSide *= -1;
+    spawnFrierenRapidVisual(mode, eye, dir, length);
+    if (target) {
+      if (mode === "rapidZoltraak") {
+        const line = new Line3(eye, end);
+        const closest = new Vector3();
+        for (const e of [...enemyEntities]) {
+          const center = e.position.clone().setY(2.7 * e.scale);
+          line.closestPointToPoint(center, true, closest);
+          if (closest.distanceTo(center) < 2.6 + e.radius) {
+            applyDamageToEntity(e, cfg.damage, center, "normal", true);
+            e.stun = Math.max(e.stun || 0, 0.14);
+          }
+        }
+      } else {
+        const center = target.position.clone().setY(2.7 * target.scale);
+        applyDamageToEntity(target, cfg.damage, center, "normal", true);
+        target.stun = Math.max(target.stun || 0, 0.07);
+      }
+    }
+    if (mode === "catastravia") {
+      spawnExplosionParticles(eye.clone().addScaledVector(dir, 4.2), 16761370, 2, 5);
+      spawnExplosionParticles(end, 16761370, 2, 5);
+    }
+    cameraShake = Math.max(cameraShake, mode === "catastravia" ? 0.1 : 0.07);
+    sfx(mode === "catastravia" ? "catastravia" : "rapidzoltraak");
+  }
+  function beginFrierenRapid(mode) {
+    if (!playerEntity) return;
+    if (frierenRapidMode === mode) return;
+    if (frierenRapidMode) {
+      sfx("deny");
+      showFloatText("RAPID CAST ACTIVE \u2014 RELEASE THE OTHER KEY", "#dff7ff");
+      return;
+    }
+    const cfg = FRIEREN_RAPID_CONFIG[mode];
+    if (frierenTimers[mode] > 0) {
+      sfx("deny");
+      showFloatText(`${cfg.label} RECHARGING \u2014 ${Math.ceil(frierenTimers[mode])}s`, "#ffe28a");
+      return;
+    }
+    frierenRapidMode = mode;
+    frierenRapidNextShot = 0;
+    showFloatText(`${cfg.label} \u2014 HOLD TO FIRE`, mode === "catastravia" ? "#ffe27a" : "#dff7ff");
+  }
+  function stopFrierenRapid(mode) {
+    if (!frierenRapidMode) return;
+    if (mode && mode !== frierenRapidMode) return;
+    const ended = frierenRapidMode;
+    frierenRapidMode = null;
+    frierenRapidNextShot = 0;
+    frierenTimers[ended] = FRIEREN_RAPID_CONFIG[ended].cooldown;
+  }
+  function disposeFrierenRapidShot(shot) {
+    scene.remove(shot.group);
+    shot.coreMat.dispose();
+    shot.glowMat.dispose();
+    for (const star of shot.stars) star.sprite.material.dispose();
+  }
+  function updateFrierenRapidShots(delta) {
+    for (let i = frierenRapidShots.length - 1; i >= 0; i--) {
+      const shot = frierenRapidShots[i];
+      shot.life -= delta;
+      const fade = Math.max(0, shot.life / shot.maxLife);
+      shot.coreMat.opacity = 0.95 * fade;
+      shot.glowMat.opacity = (shot.glowMat.color.getHex() === 16747008 ? 0.2 : 0.15) * fade;
+      for (const star of shot.stars) {
+        const mat = star.sprite.material;
+        mat.rotation += delta * 9;
+        mat.opacity = star.baseOpacity * fade;
+      }
+      if (shot.life <= 0) {
+        disposeFrierenRapidShot(shot);
+        frierenRapidShots.splice(i, 1);
+      }
+    }
+  }
+  function updateFrierenRapid(delta) {
+    frierenTimers.catastravia = Math.max(0, frierenTimers.catastravia - delta);
+    frierenTimers.rapidZoltraak = Math.max(0, frierenTimers.rapidZoltraak - delta);
+    updateFrierenRapidShots(delta);
+    if (frierenRapidMode) {
+      frierenRapidNextShot -= delta;
+      if (frierenRapidNextShot <= 0) {
+        fireFrierenRapidShot();
+        frierenRapidNextShot = FRIEREN_RAPID_CONFIG[frierenRapidMode].interval;
+      }
+    }
+  }
+  var JUDRA_DJIM_CONFIG = { damage: 12e3, chainDamage: 7500, range: 260, chainRange: 34, maxChain: 4, cooldown: 9 };
+  function judradjimLine(start, end, color, opacity, jitter, segments = 10) {
+    const delta = end.clone().sub(start);
+    const length = delta.length();
+    if (length < 0.01) return null;
+    const dir = delta.clone().normalize();
+    const anchor = Math.abs(dir.y) > 0.94 ? new Vector3(1, 0, 0) : new Vector3(0, 1, 0);
+    const side = new Vector3().crossVectors(dir, anchor).normalize();
+    const up = new Vector3().crossVectors(side, dir).normalize();
+    const points = [];
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const point = start.clone().lerp(end, t);
+      if (i > 0 && i < segments) {
+        point.addScaledVector(side, (Math.random() - 0.5) * jitter);
+        point.addScaledVector(up, (Math.random() - 0.5) * jitter);
+      }
+      points.push(point);
+    }
+    const geometry = new BufferGeometry().setFromPoints(points);
+    const material = new LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      depthTest: false
+    });
+    const line = new Line(geometry, material);
+    line.renderOrder = 9;
+    return { line, material };
+  }
+  function addJudradjimBolt(group, start, end, materials, strong = false) {
+    const outer = judradjimLine(start, end, 9125375, strong ? 0.9 : 0.8, strong ? 1.35 : 0.8, strong ? 13 : 9);
+    if (outer) {
+      group.add(outer.line);
+      materials.push({ material: outer.material, opacity: strong ? 0.9 : 0.8 });
+    }
+    const inner = judradjimLine(start, end, 15984895, strong ? 1 : 0.92, strong ? 0.55 : 0.35, strong ? 13 : 9);
+    if (inner) {
+      group.add(inner.line);
+      materials.push({ material: inner.material, opacity: strong ? 1 : 0.92 });
+    }
+  }
+  function addJudradjimGlow(group, position, scale, opacity, glows) {
+    const material = new SpriteMaterial({
+      map: getGlowTexture(),
+      color: 11889663,
+      transparent: true,
+      opacity,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      depthTest: false
+    });
+    const sprite = new Sprite(material);
+    sprite.position.copy(position);
+    sprite.scale.set(scale, scale, 1);
+    sprite.renderOrder = 8;
+    group.add(sprite);
+    glows.push({ sprite, baseOpacity: opacity });
+  }
+  function castJudradjim() {
+    if (!playerEntity) return;
+    if (frierenTimers.judradjim > 0) {
+      sfx("deny");
+      showFloatText(`JUDRA DJIM RECHARGING \u2014 ${Math.ceil(frierenTimers.judradjim)}s`, "#d8b4fe");
+      return;
+    }
+    frierenTimers.judradjim = JUDRA_DJIM_CONFIG.cooldown;
+    const primary = frierenNearestTarget(JUDRA_DJIM_CONFIG.range);
+    const targets = primary ? [primary] : [];
+    const used = new Set(targets);
+    let last = primary;
+    while (last && targets.length <= JUDRA_DJIM_CONFIG.maxChain) {
+      let next = null;
+      let best = JUDRA_DJIM_CONFIG.chainRange;
+      for (const e of enemyEntities) {
+        if (used.has(e)) continue;
+        const d = e.position.distanceTo(last.position);
+        if (d < best) {
+          best = d;
+          next = e;
+        }
+      }
+      if (!next) break;
+      targets.push(next);
+      used.add(next);
+      last = next;
+    }
+    const group = new Group();
+    const materials = [];
+    const glows = [];
+    let impact = getAimPoint();
+    if (primary) impact = primary.position.clone().setY(2.7 * primary.scale);
+    const skyStart = impact.clone().add(new Vector3(0, 34, 0));
+    addJudradjimBolt(group, skyStart, impact, materials, true);
+    const branchStart = skyStart.clone().lerp(impact, 0.2);
+    addJudradjimBolt(group, branchStart.clone().add(new Vector3(4.5, 0, -2.5)), impact, materials);
+    const caster = playerEntity.position.clone().setY(firstPersonView ? 4.2 : 3.4);
+    addJudradjimGlow(group, caster, 5.5, 0.28, glows);
+    addJudradjimGlow(group, impact, 8, 0.34, glows);
+    for (let i = 0; i < 5; i++) {
+      const angle = i / 5 * Math.PI * 2;
+      const start = caster.clone().add(new Vector3(Math.cos(angle) * 3, (Math.random() - 0.5) * 2.8, Math.sin(angle) * 3));
+      const end = caster.clone().add(new Vector3(Math.cos(angle + 1.7) * 2.7, (Math.random() - 0.5) * 3, Math.sin(angle + 1.7) * 2.7));
+      addJudradjimBolt(group, start, end, materials);
+    }
+    spawnHollowPurpleRing(caster, 11032055, 16, 0.34, true);
+    for (let i = 1; i < targets.length; i++) {
+      const from = targets[i - 1].position.clone().setY(2.7 * targets[i - 1].scale);
+      const to = targets[i].position.clone().setY(2.7 * targets[i].scale);
+      addJudradjimBolt(group, from, to, materials);
+    }
+    if (targets.length > 0) {
+      for (let i = 0; i < targets.length; i++) {
+        const target = targets[i];
+        const center = target.position.clone().setY(2.7 * target.scale);
+        const damage = i === 0 ? JUDRA_DJIM_CONFIG.damage : JUDRA_DJIM_CONFIG.chainDamage;
+        addJudradjimGlow(group, center, i === 0 ? 7 : 5, i === 0 ? 0.32 : 0.26, glows);
+        applyDamageToEntity(target, damage, center, "normal", true);
+        target.stun = Math.max(target.stun || 0, i === 0 ? 0.9 : 0.45);
+        spawnHollowPurpleRing(center, 11032055, i === 0 ? 34 : 22, 0.42, true);
+        spawnExplosionParticles(center, 11032055, i === 0 ? 14 : 8, i === 0 ? 24 : 16);
+      }
+    } else {
+      spawnExplosionParticles(impact, 11032055, 10, 18);
+    }
+    scene.add(group);
+    judradjimBolts.push({ group, life: 2.2, maxLife: 2.2, materials, glows });
+    cameraShake = Math.max(cameraShake, 1.1);
+    gojoBloom = Math.max(gojoBloom, 0.7);
+    sfx("judradjim");
+    showFloatText(
+      targets.length > 1 ? `JUDRA DJIM \u2014 CHAINED THROUGH ${targets.length}` : "JUDRA DJIM \u2014 PURPLE SKYFALL",
+      "#d8b4fe"
+    );
+  }
+  function disposeJudradjimBolt(bolt) {
+    scene.remove(bolt.group);
+    bolt.group.traverse((o) => {
+      const line = o;
+      if (line.geometry) line.geometry.dispose();
+    });
+    for (const entry of bolt.materials) entry.material.dispose();
+    for (const glow of bolt.glows) glow.sprite.material.dispose();
+  }
+  function updateJudradjimBolts(delta) {
+    for (let i = judradjimBolts.length - 1; i >= 0; i--) {
+      const bolt = judradjimBolts[i];
+      bolt.life -= delta;
+      const fade = Math.max(0, bolt.life / bolt.maxLife);
+      for (const entry of bolt.materials) entry.material.opacity = entry.opacity * fade;
+      for (const glow of bolt.glows) glow.sprite.material.opacity = glow.baseOpacity * fade;
+      if (bolt.life <= 0) {
+        disposeJudradjimBolt(bolt);
+        judradjimBolts.splice(i, 1);
+      }
     }
   }
   function makeHexShieldMaterials() {
@@ -29807,13 +30253,19 @@
     set("zoltraak", frierenTimers.zoltraak > 0 ? `${Math.ceil(frierenTimers.zoltraak)}s` : "READY", frierenTimers.zoltraak > 0, !!frierenBeam);
     set("hex", frierenFrontShield ? "ACTIVE" : frierenTimers.shield > 0 ? `${Math.ceil(frierenTimers.shield)}s` : "READY", frierenTimers.shield > 0, !!frierenFrontShield);
     set("sphere", frierenSphereShield ? "ACTIVE" : frierenTimers.sphere > 0 ? `${Math.ceil(frierenTimers.sphere)}s` : "READY", frierenTimers.sphere > 0, !!frierenSphereShield);
+    set("catastravia", frierenRapidMode === "catastravia" ? "FIRING" : frierenTimers.catastravia > 0 ? `${Math.ceil(frierenTimers.catastravia)}s` : "READY", frierenTimers.catastravia > 0, frierenRapidMode === "catastravia");
+    set("rapid", frierenRapidMode === "rapidZoltraak" ? "FIRING" : frierenTimers.rapidZoltraak > 0 ? `${Math.ceil(frierenTimers.rapidZoltraak)}s` : "READY", frierenTimers.rapidZoltraak > 0, frierenRapidMode === "rapidZoltraak");
+    set("judradjim", frierenTimers.judradjim > 0 ? `${Math.ceil(frierenTimers.judradjim)}s` : "READY", frierenTimers.judradjim > 0);
   }
   function updateFrierenTechniques(delta) {
     frierenTimers.zoltraak = Math.max(0, frierenTimers.zoltraak - delta);
     frierenTimers.shield = Math.max(0, frierenTimers.shield - delta);
     frierenTimers.sphere = Math.max(0, frierenTimers.sphere - delta);
+    frierenTimers.judradjim = Math.max(0, frierenTimers.judradjim - delta);
     updateZoltraak(delta);
     updateFrierenShields(delta);
+    updateFrierenRapid(delta);
+    updateJudradjimBolts(delta);
     updateFrierenAbilityHUD();
   }
   function clearFrierenEffects() {
@@ -29839,7 +30291,13 @@
       disposeFrierenShield(frierenSphereShield);
       frierenSphereShield = null;
     }
-    frierenTimers = { zoltraak: 0, shield: 0, sphere: 0 };
+    frierenRapidMode = null;
+    frierenRapidNextShot = 0;
+    for (const shot of frierenRapidShots) disposeFrierenRapidShot(shot);
+    frierenRapidShots = [];
+    for (const bolt of judradjimBolts) disposeJudradjimBolt(bolt);
+    judradjimBolts = [];
+    frierenTimers = { zoltraak: 0, shield: 0, sphere: 0, catastravia: 0, rapidZoltraak: 0, judradjim: 0 };
   }
   function gojoNearestTarget(maxDist) {
     if (!playerEntity) return null;
@@ -31218,8 +31676,13 @@
       byId("fp-weapon").innerText = "LIMITLESS";
       byId("fp-weapon-state").innerText = gojoInfinityOn ? "INFINITY" : "INFINITY OFF";
     } else if (isFrieren()) {
-      byId("fp-weapon").innerText = "ZOLTRAAK";
-      byId("fp-weapon-state").innerText = frierenTimers.zoltraak > 0 ? `RECHARGE ${Math.ceil(frierenTimers.zoltraak)}s` : "WHITE BEAM READY";
+      if (frierenRapidMode) {
+        byId("fp-weapon").innerText = frierenRapidMode === "catastravia" ? "CATASTRAVIA" : "RAPID ZOLTRAAK";
+        byId("fp-weapon-state").innerText = "RAPID FIRE";
+      } else {
+        byId("fp-weapon").innerText = "ZOLTRAAK";
+        byId("fp-weapon-state").innerText = frierenTimers.zoltraak > 0 ? `RECHARGE ${Math.ceil(frierenTimers.zoltraak)}s` : "WHITE BEAM READY";
+      }
     } else {
       byId("fp-weapon").innerText = profile.label;
       byId("fp-weapon-state").innerText = playerEntity.overheated ? "THERMAL VENT" : profile.kind === "beam" ? `BEAM x${getBeamHeatMult().toFixed(2)}` : "READY";
