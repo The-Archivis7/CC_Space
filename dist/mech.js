@@ -17007,6 +17007,44 @@
       this.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
     }
   };
+  var TetrahedronGeometry = class extends PolyhedronGeometry {
+    constructor(radius = 1, detail = 0) {
+      const vertices = [
+        1,
+        1,
+        1,
+        -1,
+        -1,
+        1,
+        -1,
+        1,
+        -1,
+        1,
+        -1,
+        -1
+      ];
+      const indices = [
+        2,
+        1,
+        0,
+        0,
+        3,
+        2,
+        1,
+        3,
+        0,
+        2,
+        3,
+        1
+      ];
+      super(vertices, indices, radius, detail);
+      this.type = "TetrahedronGeometry";
+      this.parameters = {
+        radius,
+        detail
+      };
+    }
+  };
   var TorusGeometry = class extends BufferGeometry {
     constructor(radius = 1, tube = 0.4, radialSegments = 8, tubularSegments = 6, arc = Math.PI * 2) {
       super();
@@ -25729,8 +25767,29 @@
   var pickups = [];
   var pickupPads = [];
   var arenaLavaPools = [];
+  var arenaIcePatches = [];
+  var arenaCoolVents = [];
   var wingmanDrone = null;
   var mouseDown = false;
+  var gojoBlueOrb = null;
+  var gojoDomain = null;
+  var gojoPurple = null;
+  var gojoTimers = { blue: 0, red: 0, purple: 0, domain: 0 };
+  var gojoInfinityOn = true;
+  var gojoInfinityFx = 0;
+  var gojoBloom = 0;
+  var glowTexture = null;
+  var starTexture = null;
+  var firstPersonView = false;
+  var fpYaw = 0;
+  var fpPitch = 0;
+  var fpLastMouseX = -1;
+  var fpLastMouseY = -1;
+  var fpLockAcquired = false;
+  var playerMomentum = new Vector3();
+  var heliosBeam = null;
+  var heliosBeamTick = 0;
+  var heliosBeamHitFx = 0;
   var SAVE_KEY = "ironmaw_forge_save_v1";
   function saveGame() {
     try {
@@ -25738,6 +25797,7 @@
         credits: GAME_STATE.credits,
         rp: GAME_STATE.rp,
         tokens: GAME_STATE.tokens,
+        username: GAME_STATE.username,
         equipped: GAME_STATE.equipped,
         paint: GAME_STATE.paint,
         unlockedParts: {},
@@ -25758,6 +25818,7 @@
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return false;
       const data = JSON.parse(raw);
+      if (typeof data.username === "string" && data.username.trim()) GAME_STATE.username = data.username.trim().slice(0, 18);
       if (typeof data.credits === "number") GAME_STATE.credits = data.credits;
       if (typeof data.rp === "number") GAME_STATE.rp = data.rp;
       if (typeof data.tokens === "number") GAME_STATE.tokens = data.tokens;
@@ -25891,6 +25952,10 @@
         tone(330, 0.12, "square", 0.1, 440);
         setTimeout(() => sfx2tone(440, 0.16, "square", 0.1), 120);
         break;
+      case "beam":
+        tone(1180, 0.16, "sawtooth", 0.055, 760);
+        noise(0.14, 0.06, 5200);
+        break;
     }
   }
   function sfx2tone(freq, dur, type, vol) {
@@ -25965,8 +26030,14 @@
     if (btn) btn.innerText = AudioSys.muted ? "\u{1F507} MUTED" : "\u{1F50A} SOUND";
   }
   function tryBoostDash() {
-    if (!playerEntity || playerEntity.dashCooldown > 0 || playerEntity.energy < 25) {
-      if (playerEntity && playerEntity.energy < 25) sfx("deny");
+    if (!playerEntity) return;
+    if (playerEntity.energy <= 0.01) {
+      sfx("deny");
+      showFloatText("CORE DRAINED \u2014 DASH OFFLINE", "#ff5533");
+      return;
+    }
+    if (playerEntity.dashCooldown > 0) {
+      sfx("deny");
       return;
     }
     let dir = new Vector3();
@@ -25980,8 +26051,8 @@
       fwd.y = 0;
       dir = fwd.normalize();
     }
-    playerEntity.energy -= 25;
-    playerEntity.dashCooldown = 1.6;
+    playerEntity.energy = Math.max(0, playerEntity.energy - 25);
+    playerEntity.dashCooldown = playerEntity.energy <= 0.01 ? 1.2 : 0;
     playerEntity.dashTime = 0.22;
     playerEntity.dashDir = dir.normalize();
     playerEntity.invuln = 0.3;
@@ -25998,6 +26069,164 @@
   function toggleWingmanHold() {
     GAME_STATE.wingmanHold = !GAME_STATE.wingmanHold;
     showFloatText(GAME_STATE.wingmanHold ? "DRONE: HOLD POSITION" : "DRONE: ESCORT MODE", "#00f0ff");
+  }
+  var WEAPON_PROFILES = {
+    cannon_arms: { id: "cannon_arms", label: "ROTARY AUTOCANNONS", kind: "cannon", sfx: "cannon", interval: 0.11, damageMult: 0.21, speed: 215, range: 70, color: 16764006, size: 0.2, trail: true, recoil: 0.2 },
+    plasma_arms: { id: "plasma_arms", label: "TWIN PLASMA", kind: "plasma", sfx: "plasma", interval: 0.42, damageMult: 0.64, speed: 135, range: 90, color: 6750156, size: 0.42, trail: true, recoil: 0.3, splashRadius: 3.5 },
+    grenade_arms: { id: "grenade_arms", label: "ARC MORTARS", kind: "grenade", sfx: "cannon", interval: 0.34, damageMult: 0.42, speed: 100, range: 100, color: 16753229, size: 0.3, trail: true, recoil: 0.38, splashRadius: 7 },
+    beamer_arms: { id: "beamer_arms", label: "HELIOS BEAM", kind: "beam", sfx: "beam", interval: 0.1, damageMult: 0.25, speed: 0, range: 110, color: 9369343, size: 0.22, trail: false, recoil: 0.1 },
+    railgun_arms: { id: "railgun_arms", label: "MAG RAILGUNS", kind: "rail", sfx: "rail", interval: 1, damageMult: 0.61, speed: 330, range: 150, color: 16777215, size: 0.2, trail: true, recoil: 0.6 }
+  };
+  var ARENA_DEFS = {
+    foundry: {
+      id: "foundry",
+      name: "INDUSTRIAL FOUNDRY",
+      layout: "foundry",
+      floor: 1449e3,
+      fog: 658966,
+      fogD: 75e-4,
+      primary: 1976635,
+      accent: 16733440,
+      hemi: 3820134,
+      sun: 16773862,
+      sunI: 1.5,
+      heatGain: 1,
+      coolMult: 1,
+      blurb: "Symmetrical cargo grid. Coolant vents chill your reactor while you hold them."
+    },
+    volcanic: {
+      id: "volcanic",
+      name: "VOLCANIC REFINERY",
+      layout: "volcanic",
+      floor: 2756362,
+      fog: 1705219,
+      fogD: 0.011,
+      primary: 4003858,
+      accent: 16729088,
+      hemi: 6692885,
+      sun: 16756864,
+      sunI: 1.7,
+      heatGain: 1.35,
+      coolMult: 0.85,
+      blurb: "Molten caldera. +35% weapon heat gain, lava pools burn hulls, cooling is sluggish."
+    },
+    arctic: {
+      id: "arctic",
+      name: "ARCTIC EXPANSE",
+      layout: "arctic",
+      floor: 1451054,
+      fog: 726817,
+      fogD: 0.012,
+      primary: 2901586,
+      accent: 6740479,
+      hemi: 2771558,
+      sun: 12577023,
+      sunI: 1.3,
+      heatGain: 0.8,
+      coolMult: 1.2,
+      blurb: "Sub-zero ice field. Weapon heat gain -20%, rapid cooling, but ice patches destroy traction."
+    }
+  };
+  function getArenaDef() {
+    return ARENA_DEFS[GAME_STATE.selectedArena] || ARENA_DEFS.foundry;
+  }
+  function arenaHeatGain() {
+    return getArenaDef().heatGain;
+  }
+  function arenaCoolMult() {
+    return getArenaDef().coolMult;
+  }
+  function getArmsPart() {
+    return PARTS_DB.arms.find((p) => p.id === GAME_STATE.equipped.arms);
+  }
+  function getWeaponProfile() {
+    return WEAPON_PROFILES[GAME_STATE.equipped.arms] || WEAPON_PROFILES.cannon_arms;
+  }
+  function isGojo() {
+    return (GAME_STATE.username || "").trim().toLowerCase() === "gojo";
+  }
+  function getBeamHeatMult() {
+    const core = PARTS_DB.core.find((p) => p.id === GAME_STATE.equipped.core);
+    let coreCool = core?.heatCool || 40;
+    if (TECH_NODES.find((t) => t.id === "tech_1" && t.unlocked)) coreCool *= 1.25;
+    return MathUtils.clamp(1 - (coreCool - 40) / 110, 0.12, 1);
+  }
+  function getFPCameraDir(out) {
+    const dir = out || new Vector3();
+    return dir.set(0, 0, -1).applyEuler(new Euler(fpPitch, fpYaw, 0, "YXZ")).normalize();
+  }
+  function getAimPoint() {
+    if (firstPersonView && playerEntity) {
+      return playerEntity.position.clone().setY(4.95).addScaledVector(getFPCameraDir(), 220);
+    }
+    const raycaster = new Raycaster();
+    raycaster.setFromCamera(mousePos, camera);
+    const plane = new Plane(new Vector3(0, 1, 0), -2);
+    const targetPoint = new Vector3();
+    const hit = raycaster.ray.intersectPlane(plane, targetPoint);
+    if (!hit || raycaster.ray.origin.distanceTo(targetPoint) > 260) {
+      raycaster.ray.at(240, targetPoint);
+    }
+    return targetPoint;
+  }
+  function getBarrelTips() {
+    const tips = [];
+    if (!playerEntity) return tips;
+    playerEntity.mesh.traverse((child) => {
+      if (child.name === "barrelTip") {
+        const wp = new Vector3();
+        child.getWorldPosition(wp);
+        tips.push(wp);
+      }
+    });
+    return tips;
+  }
+  function getMuzzlePosition(tips) {
+    const barrels = tips || getBarrelTips();
+    if (barrels.length > 0) {
+      activeWeaponBarrelIndex = (activeWeaponBarrelIndex + 1) % barrels.length;
+      return barrels[activeWeaponBarrelIndex].clone();
+    }
+    return playerEntity ? playerEntity.position.clone().add(new Vector3(0, 3.1, 0)) : new Vector3();
+  }
+  function setFirstPerson(on, silent = false) {
+    if (on === firstPersonView && document.body.classList.contains("fp-view") === on) return;
+    firstPersonView = on;
+    document.body.classList.toggle("fp-view", on);
+    if (playerEntity) playerEntity.mesh.visible = !on;
+    camera.fov = on ? 74 : 60;
+    camera.updateProjectionMatrix();
+    camera.rotation.order = "YXZ";
+    if (on) {
+      const dir = new Vector3();
+      camera.getWorldDirection(dir);
+      if (dir.lengthSq() < 1e-3) dir.set(0, 0, -1);
+      fpPitch = Math.asin(MathUtils.clamp(dir.y, -0.99, 0.99));
+      fpYaw = Math.atan2(-dir.x, -dir.z);
+      fpLastMouseX = -1;
+      fpLastMouseY = -1;
+      fpLockAcquired = false;
+      hideHeliosBeam();
+      const boot = byId("fp-boot");
+      if (boot) {
+        boot.classList.remove("show");
+        void boot.offsetWidth;
+        boot.classList.add("show");
+      }
+      try {
+        const maybe = renderer.domElement.requestPointerLock();
+        if (maybe && typeof maybe.catch === "function") maybe.catch(() => {
+        });
+      } catch (e) {
+      }
+    } else {
+      if (document.pointerLockElement) document.exitPointerLock();
+      const reticle = byId("reticle-circle");
+      if (reticle) reticle.style.transform = "";
+      const boot = byId("fp-boot");
+      if (boot) boot.classList.remove("show");
+    }
+    if (!silent) showFloatText(on ? "COMMS ESTABLISHED: SPARK-10 STREAM ACTIVE" : "THIRD-PERSON CHASE VIEW", "#00f0ff");
   }
   var BOSS_DEFS = {
     omega: { name: "OMEGA TITAN SIEGE PLATFORM", hp: 42e3, shield: 14e3, damage: 520, scale: 2.8, speed: 9, color: 16720452 },
@@ -26215,6 +26444,13 @@
   }
   function damagePlayer(damage, hitPos) {
     if (!playerEntity || playerEntity.invuln > 0) return;
+    if (isGojo() && gojoInfinityOn) {
+      damage *= 0.12;
+      if (gojoInfinityFx <= 0) {
+        gojoInfinityFx = 0.35;
+        spawnExplosionParticles(playerEntity.position.clone().setY(4.2), 10479871, 4, 7);
+      }
+    }
     playerEntity.hitFlash = 1;
     applyHitFlash(playerEntity.mesh, 1);
     if (playerEntity.shield > 0) {
@@ -26271,6 +26507,7 @@
     wingmanDrone.velocity.clampLength(0, cfg.preset === "sniper" ? 26 : 34);
     wingmanDrone.position.addScaledVector(wingmanDrone.velocity, dt);
     wingmanDrone.mesh.position.copy(wingmanDrone.position);
+    wingmanDrone.mesh.visible = !firstPersonView;
     if (target) wingmanDrone.mesh.lookAt(target.position.x, 3, target.position.z);
     wingmanDrone.ring.rotation.z += dt * 4;
     wingmanDrone.fireCooldown -= dt;
@@ -26497,45 +26734,45 @@
   var PARTS_DB = {
     head: [
       { id: "scout_head", name: "Scout Optics Array", hp: 200, shield: 100, speed: 6, cost: 0, unlocked: true, desc: "Light high-res scanner cowl with multi-lens target sensors." },
-      { id: "combat_head", name: "Iron Command Visor", hp: 450, shield: 250, speed: 0, cost: 1200, unlocked: false, desc: "Heavy military visor with sloped composite faceplate." },
+      { id: "combat_head", name: "Iron Command Visor", hp: 500, shield: 260, speed: 0, cost: 1200, unlocked: false, desc: "Heavy military visor with sloped composite faceplate." },
+      { id: "tactical_head", name: "Falcon Drone Node", hp: 560, shield: 300, speed: 10, cost: 2e3, unlocked: false, desc: "Drone-relay sensor barrette. Faster chassis sync than the command visor." },
       { id: "siege_head", name: "Siege Dread Helmet", hp: 800, shield: 450, speed: -6, cost: 3500, unlocked: false, desc: "Reinforced armored crown designed for brutal frontline pressure." },
-      { id: "tactical_head", name: "Falcon Drone Node", hp: 300, shield: 150, speed: 8, cost: 2e3, unlocked: false, desc: "Sensor barrette tuned for drone relay targeting with a wide sweep arc." },
-      { id: "guardian_head", name: "Aegis Bastion Helm", hp: 640, shield: 360, speed: -3, cost: 4500, unlocked: false, desc: "Fortified pillar helm shielding the entire cockpit ring." }
+      { id: "guardian_head", name: "Aegis Bastion Helm", hp: 1e3, shield: 580, speed: -2, cost: 4500, unlocked: false, desc: "Fortified pillar helm shielding the entire cockpit ring. Strictly outclasses the dread helmet." }
     ],
     torso: [
       { id: "light_torso", name: "Striker Lightweight Frame", hp: 1400, shield: 500, energy: 120, speed: 18, cost: 0, unlocked: true, desc: "Agile chassis equipped with streamlined thruster wings." },
-      { id: "heavy_torso", name: "Iron Maw Heavy Torso", hp: 2600, shield: 1e3, energy: 160, speed: 0, cost: 2500, unlocked: false, desc: "Massive industrial frame featuring dual chest reactor intakes." },
-      { id: "assault_torso", name: "Omega Citadel Torso", hp: 4200, shield: 1600, energy: 220, speed: -12, cost: 6e3, unlocked: false, desc: "Impenetrable siege chassis with dynamic chest plating." },
-      { id: "phantom_torso", name: "Shade Phantom Frame", hp: 1750, shield: 720, energy: 150, speed: 14, cost: 3200, unlocked: false, desc: "Featherweight stealth frame tuned for hit-and-run skirmishing." },
-      { id: "vanguard_torso", name: "Vanguard Bulwark Torso", hp: 3400, shield: 1350, energy: 190, speed: -6, cost: 4800, unlocked: false, desc: "Field-command bulk bristling with relay antennae." }
+      { id: "phantom_torso", name: "Shade Phantom Frame", hp: 1900, shield: 800, energy: 160, speed: 20, cost: 3200, unlocked: false, desc: "Featherweight stealth frame. Improves every Striker stat with hit-and-run speed." },
+      { id: "heavy_torso", name: "Iron Maw Heavy Torso", hp: 2600, shield: 1100, energy: 170, speed: 0, cost: 2500, unlocked: false, desc: "Massive industrial frame featuring dual chest reactor intakes." },
+      { id: "vanguard_torso", name: "Vanguard Bulwark Torso", hp: 3300, shield: 1450, energy: 210, speed: 6, cost: 4800, unlocked: false, desc: "Field-command bulk with relay antennae. Tougher and faster than the Iron Maw." },
+      { id: "assault_torso", name: "Omega Citadel Torso", hp: 4200, shield: 1800, energy: 240, speed: -10, cost: 6e3, unlocked: false, desc: "Impenetrable siege chassis with dynamic chest plating and the largest reactor bay." }
     ],
     arms: [
-      { id: "cannon_arms", name: "Heavy Rotary Autocannons", damage: 320, heatRate: 15, range: 70, cost: 0, unlocked: true, desc: "Dual twin-barrel ballistic rotary cannons with high fire rate." },
-      { id: "plasma_arms", name: "Twin Plasma Emitters", damage: 520, heatRate: 26, range: 85, cost: 2800, unlocked: false, desc: "Superheated plasma chargers that melt shields instantly." },
-      { id: "railgun_arms", name: "Linear Magnetic Railguns", damage: 850, heatRate: 42, range: 140, cost: 5500, unlocked: false, desc: "Extreme long-range kinetic accelerators that pierce armor." },
-      { id: "grenade_arms", name: "Arc Mortar Pods", damage: 640, heatRate: 34, range: 95, cost: 4200, unlocked: false, desc: "Anvil-breech mortars that lob heavy shrapnel shells from cover." },
-      { id: "beamer_arms", name: "Helios Beam Cannons", damage: 700, heatRate: 30, range: 110, cost: 5200, unlocked: false, desc: "Prismatic lens emitters delivering intense raw focused heat." }
+      { id: "cannon_arms", name: "Heavy Rotary Autocannons", damage: 320, heatRate: 6, range: 70, cost: 0, unlocked: true, desc: "Twin rotary cannons. Alternating barrels, fast tracers, cheap heat." },
+      { id: "plasma_arms", name: "Twin Plasma Emitters", damage: 560, heatRate: 23, range: 90, cost: 2800, unlocked: false, desc: "Slow heavy plasma orbs that splash on impact and chew through shields." },
+      { id: "grenade_arms", name: "Arc Mortar Pods", damage: 700, heatRate: 17, range: 100, cost: 4200, unlocked: false, desc: "Lobbed arcing shells that detonate with wide shrapnel blasts. Rewards prediction." },
+      { id: "beamer_arms", name: "Helios Beam Cannons", damage: 900, heatRate: 75, range: 110, cost: 5200, unlocked: false, desc: "Continuous prismatic lance. Highest damage output of any arm in the Forge, but heat gain is brutal without reactor cooling investment. Arctic air vents an extra 20%." },
+      { id: "railgun_arms", name: "Linear Magnetic Railguns", damage: 1150, heatRate: 57, range: 150, cost: 5500, unlocked: false, desc: "Long-range kinetic slugs that pierce up to three hulls. Heavy recoil, heavy heat." }
     ],
     legs: [
       { id: "walker_legs", name: "Bipedal Piston Hydraulics", hp: 500, speed: 55, cost: 0, unlocked: true, desc: "Articulated mechanical bipedal legs with knee shock absorbers." },
       { id: "treads_legs", name: "Armored Twin Treads", hp: 1200, speed: 38, cost: 2e3, unlocked: false, desc: "Heavy tank track modules providing maximum stability." },
-      { id: "hover_legs", name: "Anti-Grav Thruster Ring", hp: 400, speed: 85, cost: 4800, unlocked: false, desc: "High-tech hover propulsion ring for rapid directional strafing." },
-      { id: "spider_legs", name: "Chitin Spider Struts", hp: 700, speed: 72, cost: 3800, unlocked: false, desc: "Four-legged all-terrain rig that climbs broken cover quickly." },
-      { id: "bulwark_legs", name: "Anchor Stabilizer Pistons", hp: 1600, speed: 30, cost: 2600, unlocked: false, desc: "Reinforced piston legs braced for static shock-absorber stands." }
+      { id: "bulwark_legs", name: "Anchor Stabilizer Pistons", hp: 1700, speed: 44, cost: 2600, unlocked: false, desc: "Wide anchor stance with hydraulic feet. More armor and more speed than twin treads." },
+      { id: "spider_legs", name: "Chitin Spider Struts", hp: 900, speed: 72, cost: 3800, unlocked: false, desc: "Four-legged all-terrain rig that climbs broken cover quickly." },
+      { id: "hover_legs", name: "Anti-Grav Thruster Ring", hp: 1e3, speed: 88, cost: 4800, unlocked: false, desc: "Hover propulsion ring with layered thrusters \u2014 the fastest chassis in the Forge." }
     ],
     core: [
       { id: "standard_core", name: "Fission Power Core", energy: 100, heatCool: 40, cost: 0, unlocked: true, desc: "Standard reactor core with reliable heat sink venting." },
-      { id: "high_output_core", name: "Overcharged Fusion Core", energy: 160, heatCool: 60, cost: 1800, unlocked: false, desc: "Boosted power generation for energy weapon loadouts." },
-      { id: "overclocked_core", name: "Singularity Reactor Core", energy: 240, heatCool: 85, cost: 4200, unlocked: false, desc: "Experimental reactor providing extreme power and cryo cooling." },
-      { id: "twin_core", name: "Twin Plasma Cores", energy: 300, heatCool: 70, cost: 5800, unlocked: false, desc: "Paired micro-furnaces that trade heavy power into cell heat." },
-      { id: "quantum_core", name: "Quantum Flux Reactor", energy: 280, heatCool: 110, cost: 7200, unlocked: false, desc: "Collapse-field reactor with exceptional cooling." }
+      { id: "high_output_core", name: "Overcharged Fusion Core", energy: 160, heatCool: 60, cost: 1800, unlocked: false, desc: "Boosted power generation. Cuts Helios beam heat build-up by roughly 18%." },
+      { id: "overclocked_core", name: "Singularity Reactor Core", energy: 230, heatCool: 85, cost: 4200, unlocked: false, desc: "Experimental reactor with cryo cooling. Cuts Helios beam heat build-up by roughly 41%." },
+      { id: "twin_core", name: "Twin Plasma Cores", energy: 300, heatCool: 100, cost: 5800, unlocked: false, desc: "Paired micro-furnaces with dual loop cooling. Cuts Helios beam heat by roughly 55%." },
+      { id: "quantum_core", name: "Quantum Flux Reactor", energy: 380, heatCool: 130, cost: 7200, unlocked: false, desc: "Collapse-field reactor. Best cooling in the game \u2014 cuts Helios beam heat by over 80%." }
     ],
     armor: [
       { id: "light_armor", name: "Standard Composite Plating", hpBonus: 0, speedBonus: 5, cost: 0, unlocked: true, desc: "Baseline factory armor alloy." },
       { id: "heavy_armor", name: "Sloped Titanium Plating", hpBonus: 1e3, speedBonus: -8, cost: 1500, unlocked: false, desc: "Dense sloped armor plates built to deflect kinetic rounds." },
-      { id: "reactive_armor", name: "Reactive Nanite Armor", hpBonus: 2e3, speedBonus: -16, cost: 3800, unlocked: false, desc: "Smart armor that dissipates explosions upon impact." },
-      { id: "ablative_armor", name: "Ablative Ceramic Matrix", hpBonus: 1400, speedBonus: -6, cost: 2800, unlocked: false, desc: "Layered sacrificial ceramics that slough off incoming fire." },
-      { id: "energy_armor", name: "Refraction Energy Weave", hpBonus: 800, speedBonus: 10, cost: 6500, unlocked: false, desc: "Light-bending hull weave that shifts its silhouette in combat." }
+      { id: "ablative_armor", name: "Ablative Ceramic Matrix", hpBonus: 1600, speedBonus: -3, cost: 2800, unlocked: false, desc: "Layered sacrificial ceramics that slough off incoming fire. Better armor and mobility than titanium." },
+      { id: "reactive_armor", name: "Reactive Nanite Armor", hpBonus: 2400, speedBonus: -12, cost: 3800, unlocked: false, desc: "Smart armor that dissipates explosions upon impact. Heaviest plating available." },
+      { id: "energy_armor", name: "Refraction Energy Weave", hpBonus: 2600, speedBonus: 16, cost: 6500, unlocked: false, desc: "Light-bending hull weave. Top-tier protection with no mobility penalty." }
     ]
   };
   var TECH_NODES = [
@@ -26543,6 +26780,14 @@
     { id: "tech_2", name: "Overcharged Capacitors", category: "Shields", cost: 250, unlocked: false, desc: "+30% faster shield regeneration rate." },
     { id: "tech_3", name: "High-Velocity Acceleration", category: "Weapons", cost: 400, unlocked: false, desc: "+20% projectile speed and kinetic damage." }
   ];
+  var GOJO_TECHNIQUES = [
+    { id: "tech_blue", name: "Cursed Technique: Blue", desc: "Key 1 \u2014 implosion vortex drags hostiles into a collapsing point.", color: 3046399 },
+    { id: "tech_red", name: "Cursed Technique: Red", desc: "Key 2 \u2014 reversal blast hurls hostiles back and shreds armor.", color: 16723781 },
+    { id: "tech_purple", name: "Hollow Technique: Purple", desc: "Key 3 or LMB \u2014 merge Blue and Red into a Hollow Purple annihilation orb.", color: 11032055 },
+    { id: "tech_limitless", name: "Limitless: Infinity", desc: "Key 4 \u2014 toggle Infinity. Incoming force stalls; damage is almost nullified.", color: 10479871 },
+    { id: "tech_domain", name: "Domain Expansion: Unlimited Void", desc: "Key 5 \u2014 traps every nearby hostile in an infinite information stream.", color: 7158783 }
+  ];
+  var GOJO_STATS = { hp: 14e3, shield: 8e3, energy: 600, speed: 110, heatCool: 120, damage: 4500 };
   var COLOR_PALETTES = {
     primary: [2633274, 5905950, 1916462, 5127710, 988970, 4674921],
     secondary: [16733440, 61695, 16758528, 14870768, 16720452, 65382],
@@ -26552,6 +26797,7 @@
     credits: 2e3,
     rp: 100,
     tokens: 0,
+    username: "PILOT",
     currentTab: "garage",
     activePartCategory: "head",
     selectedArena: "foundry",
@@ -26591,6 +26837,7 @@
   var garageScanRing = null;
   var arenaDust = null;
   var composer = null;
+  var bloomPass = null;
   var fxaaPass = null;
   var cameraShake = 0;
   var activeWeaponBarrelIndex = 0;
@@ -26612,12 +26859,13 @@
     container.appendChild(renderer.domElement);
     composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new UnrealBloomPass(
+    bloomPass = new UnrealBloomPass(
       new Vector2(window.innerWidth, window.innerHeight),
       0.55,
       0.4,
       0.82
-    ));
+    );
+    composer.addPass(bloomPass);
     fxaaPass = new ShaderPass(FXAAShader);
     composer.addPass(fxaaPass);
     composer.setSize(window.innerWidth, window.innerHeight);
@@ -26851,11 +27099,79 @@
       prowStripe.position.set(0, 0.42, 1.86);
       prowStripe.rotation.x = -0.28;
       torsoGroup.add(prowStripe);
+    } else if (equipped.torso === "phantom_torso") {
+      torsoWidth = 2.05;
+      torsoHeight = 2.15;
+      const hull = new Mesh(new CylinderGeometry(1, 0.6, 2.15, 4), matPrimary);
+      hull.rotation.y = Math.PI / 4;
+      torsoGroup.add(hull);
+      const cockpit = new Mesh(new BoxGeometry(1.35, 0.75, 0.9), matPrimary);
+      cockpit.position.set(0, 0.55, 0.62);
+      cockpit.rotation.x = -0.2;
+      torsoGroup.add(cockpit);
+      const canopy = new Mesh(new BoxGeometry(1, 0.3, 0.6), matEmissive);
+      canopy.position.set(0, 0.74, 0.8);
+      canopy.rotation.x = -0.35;
+      torsoGroup.add(canopy);
+      [-1, 1].forEach((sx) => {
+        const blade = new Mesh(new BoxGeometry(0.5, 0.22, 1.5), matSecondary);
+        blade.position.set(sx * 0.95, 0.32, -0.1);
+        blade.rotation.y = sx * 0.32;
+        blade.rotation.z = sx * -0.18;
+        torsoGroup.add(blade);
+        const edge = new Mesh(new BoxGeometry(0.52, 0.05, 1.1), matEmissive);
+        edge.position.set(sx * 0.95, 0.45, -0.1);
+        edge.rotation.y = sx * 0.32;
+        torsoGroup.add(edge);
+        const slit = new Mesh(new BoxGeometry(0.22, 0.06, 0.1), matEmissive);
+        slit.position.set(sx * 0.35, 0.42, 1.02);
+        torsoGroup.add(slit);
+      });
+      const dorsalFin = new Mesh(new BoxGeometry(0.16, 0.9, 1.15), matSecondary);
+      dorsalFin.position.set(0, 1, -0.55);
+      dorsalFin.rotation.x = 0.4;
+      torsoGroup.add(dorsalFin);
+    } else if (equipped.torso === "vanguard_torso") {
+      torsoWidth = 2.7;
+      torsoHeight = 2.5;
+      const hull = new Mesh(new BoxGeometry(2.4, 2.2, 2), matPrimary);
+      torsoGroup.add(hull);
+      const glacis = new Mesh(new BoxGeometry(2.5, 1.1, 0.7), matSecondary);
+      glacis.position.set(0, 0.42, 1.12);
+      glacis.rotation.x = -0.32;
+      torsoGroup.add(glacis);
+      const commandStrip = new Mesh(new BoxGeometry(2.15, 0.14, 0.12), matEmissive);
+      commandStrip.position.set(0, 0.72, 1.36);
+      torsoGroup.add(commandStrip);
+      const radarMast = new Mesh(new CylinderGeometry(0.07, 0.09, 1.6, 8), matJoint);
+      radarMast.position.set(-0.8, 1.9, -0.55);
+      torsoGroup.add(radarMast);
+      const radarDish = new Mesh(new SphereGeometry(0.42, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), matSecondary);
+      radarDish.rotation.x = -0.9;
+      radarDish.position.set(-0.8, 2.6, -0.5);
+      torsoGroup.add(radarDish);
+      const dishGlow = new Mesh(new SphereGeometry(0.1, 8, 8), matEmissive);
+      dishGlow.position.set(-0.8, 2.55, -0.28);
+      torsoGroup.add(dishGlow);
+      [0, 1, 2].forEach((i) => {
+        const h = 0.9 + i * 0.35;
+        const antenna = new Mesh(new CylinderGeometry(0.025, 0.025, h, 6), matJoint);
+        antenna.position.set(0.55 + i * 0.14, 1.5 + h / 2, -0.8);
+        torsoGroup.add(antenna);
+      });
+      [-1, 1].forEach((sx) => {
+        const pod = new Mesh(new BoxGeometry(0.5, 0.7, 0.9), matSecondary);
+        pod.position.set(sx * 1.32, 0.75, -0.3);
+        torsoGroup.add(pod);
+      });
+      const deck = new Mesh(new BoxGeometry(2, 0.2, 1.1), matSecondary);
+      deck.position.set(0, 1.15, -0.25);
+      torsoGroup.add(deck);
     }
     if (torsoGroup.children.length === 0) {
-      torsoWidth = equipped.torso === "phantom_torso" ? 2.15 : 2.2;
+      torsoWidth = 2.2;
       torsoHeight = 2.35;
-      const hullPrism = new Mesh(new CylinderGeometry(equipped.torso === "phantom_torso" ? 1 : 1.28, 0.95, 2.3, 6), matPrimary);
+      const hullPrism = new Mesh(new CylinderGeometry(1.28, 0.95, 2.3, 6), matPrimary);
       hullPrism.rotation.y = Math.PI / 6;
       torsoGroup.add(hullPrism);
       const chestPlateFb = new Mesh(new BoxGeometry(1.7, 1.05, 0.5), matSecondary);
@@ -26867,20 +27183,6 @@
         shoulderCap.position.set(sx * 1.08, 0.95, 0);
         torsoGroup.add(shoulderCap);
       });
-      if (equipped.torso === "vanguard_torso") {
-        [-0.75, 0.75].forEach((rx) => {
-          const relayMast = new Mesh(new CylinderGeometry(0.035, 0.035, 1.35, 6), matJoint);
-          relayMast.position.set(rx, 1.85, -0.4);
-          torsoGroup.add(relayMast);
-        });
-      } else {
-        [-1, 1].forEach((fx) => {
-          const stealthFin = new Mesh(new BoxGeometry(0.12, 0.75, 0.9), matSecondary);
-          stealthFin.position.set(fx * 1, 0.2, -0.65);
-          stealthFin.rotation.z = fx * -0.35;
-          torsoGroup.add(stealthFin);
-        });
-      }
     }
     const reactorMesh = new Mesh(new CylinderGeometry(0.45, 0.52, 0.4, 12), matEmissive);
     reactorMesh.rotateX(Math.PI / 2);
@@ -26992,35 +27294,58 @@
         horn.rotation.z = x > 0 ? -0.3 : 0.3;
         headGroup.add(horn);
       });
-    }
-    if (!headGroup.children.length) {
-      const isTact = equipped.head === "tactical_head";
-      const browDome = new Mesh(new SphereGeometry(isTact ? 0.3 : 0.38, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.6), matPrimary);
+    } else if (equipped.head === "tactical_head") {
+      const barrette = new Mesh(new BoxGeometry(1.25, 0.34, 0.72), matPrimary);
+      headGroup.add(barrette);
+      const band = new Mesh(new BoxGeometry(1.3, 0.1, 0.76), matSecondary);
+      band.position.y = 0.19;
+      headGroup.add(band);
+      const visorSlit = new Mesh(new BoxGeometry(0.92, 0.09, 0.12), matEmissive);
+      visorSlit.position.set(0, -0.03, 0.39);
+      headGroup.add(visorSlit);
+      [-0.34, 0.34].forEach((mx) => {
+        const mast = new Mesh(new CylinderGeometry(0.025, 0.025, 0.9, 6), matJoint);
+        mast.position.set(mx, 0.66, -0.08);
+        headGroup.add(mast);
+        const tip = new Mesh(new SphereGeometry(0.055, 8, 8), matEmissive);
+        tip.position.set(mx, 1.13, -0.08);
+        headGroup.add(tip);
+      });
+      const dish = new Mesh(new SphereGeometry(0.22, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), matSecondary);
+      dish.rotation.x = -Math.PI * 0.55;
+      dish.position.set(0, 0.42, 0.1);
+      headGroup.add(dish);
+    } else if (equipped.head === "guardian_head") {
+      const helm = new Mesh(new BoxGeometry(1.4, 1, 1.25), matPrimary);
+      headGroup.add(helm);
+      const brow = new Mesh(new BoxGeometry(1.5, 0.28, 0.7), matSecondary);
+      brow.position.set(0, 0.42, 0.3);
+      brow.rotation.x = -0.25;
+      headGroup.add(brow);
+      const visor = new Mesh(new BoxGeometry(1.15, 0.14, 0.22), matEmissive);
+      visor.position.set(0, 0.04, 0.64);
+      headGroup.add(visor);
+      const crest = new Mesh(new BoxGeometry(0.22, 0.5, 1), matSecondary);
+      crest.position.set(0, 0.66, -0.05);
+      headGroup.add(crest);
+      const halo = new Mesh(new TorusGeometry(0.72, 0.05, 8, 28), matEmissive);
+      halo.position.set(0, 0.2, -0.48);
+      headGroup.add(halo);
+      [-0.62, 0.62].forEach((gx) => {
+        const guard = new Mesh(new BoxGeometry(0.18, 0.8, 0.9), matDark);
+        guard.position.set(gx, -0.05, 0);
+        headGroup.add(guard);
+      });
+    } else {
+      const browDome = new Mesh(new SphereGeometry(0.38, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.6), matPrimary);
       browDome.position.y = 0.1;
       headGroup.add(browDome);
-      const bandHelm = new Mesh(new CylinderGeometry(isTact ? 0.33 : 0.41, isTact ? 0.33 : 0.41, 0.22, 12), matSecondary);
+      const bandHelm = new Mesh(new CylinderGeometry(0.41, 0.41, 0.22, 12), matSecondary);
       bandHelm.position.y = -0.06;
       headGroup.add(bandHelm);
-      const visorSlit = new Mesh(new BoxGeometry(0.56, 0.08, 0.1), matEmissive);
-      visorSlit.position.set(0, 0.02, 0.34);
-      headGroup.add(visorSlit);
-      if (isTact) {
-        [-0.3, 0.05].forEach((mx) => {
-          const mast = new Mesh(new CylinderGeometry(0.02, 0.02, 0.85, 6), matJoint);
-          mast.position.set(mx, 0.48, -0.05);
-          headGroup.add(mast);
-          const mastTip = new Mesh(new SphereGeometry(0.05, 8, 8), matEmissive);
-          mastTip.position.set(mx, 0.92, -0.05);
-          headGroup.add(mastTip);
-        });
-      } else {
-        [-0.34, 0.34].forEach((hx) => {
-          const horn = new Mesh(new ConeGeometry(0.11, 0.7, 6), matSecondary);
-          horn.position.set(hx, 0.5, 0);
-          horn.rotation.z = hx > 0 ? -0.28 : 0.28;
-          headGroup.add(horn);
-        });
-      }
+      const fallbackVisor = new Mesh(new BoxGeometry(0.56, 0.08, 0.1), matEmissive);
+      fallbackVisor.position.set(0, 0.02, 0.34);
+      headGroup.add(fallbackVisor);
     }
     torsoGroup.add(headGroup);
     mech.add(torsoGroup);
@@ -27108,6 +27433,53 @@
         strut.add(footPad);
         legsGroup.add(strut);
         spiderIdx += 1;
+      });
+    } else if (equipped.legs === "bulwark_legs") {
+      const hipBlock = new Mesh(new BoxGeometry(2.6, 0.9, 1.8), matDark);
+      hipBlock.position.y = 1.85;
+      legsGroup.add(hipBlock);
+      const hipArmor = new Mesh(new BoxGeometry(2.2, 0.5, 1.5), matSecondary);
+      hipArmor.position.set(0, 2.25, 0.15);
+      legsGroup.add(hipArmor);
+      [-1.45, 1.45].forEach((side, idx) => {
+        const legContainer = new Group();
+        legContainer.name = `leg_${idx}`;
+        legContainer.position.set(side, 1.75, 0);
+        legsGroup.add(legContainer);
+        const hipJoint = new Mesh(new CylinderGeometry(0.55, 0.55, 0.7, 10), matJoint);
+        hipJoint.rotateZ(Math.PI / 2);
+        legContainer.add(hipJoint);
+        const thigh = new Mesh(new BoxGeometry(0.9, 1.3, 1), matPrimary);
+        thigh.position.y = -0.7;
+        legContainer.add(thigh);
+        [-0.28, 0.28].forEach((px2) => {
+          const piston = new Mesh(new CylinderGeometry(0.09, 0.09, 1.25, 8), matGun);
+          piston.position.set(px2, -0.75, -0.62);
+          legContainer.add(piston);
+          const pistonGlow = new Mesh(new CylinderGeometry(0.12, 0.12, 0.16, 8), matEmissive);
+          pistonGlow.position.set(px2, -1.32, -0.62);
+          legContainer.add(pistonGlow);
+        });
+        const knee = new Mesh(new BoxGeometry(1, 0.6, 1.1), matSecondary);
+        knee.position.set(0, -1.45, 0.05);
+        legContainer.add(knee);
+        const shin = new Mesh(new BoxGeometry(1, 1.5, 1), matPrimary);
+        shin.position.y = -2.15;
+        legContainer.add(shin);
+        const shinPlate = new Mesh(new BoxGeometry(1.05, 1, 0.22), matSecondary);
+        shinPlate.position.set(0, -2.1, 0.55);
+        legContainer.add(shinPlate);
+        const anchor = new Mesh(new BoxGeometry(1.6, 0.32, 2), matDark);
+        anchor.position.set(0, -2.95, 0.15);
+        legContainer.add(anchor);
+        [-0.55, 0.55].forEach((cz) => {
+          const claw = new Mesh(new BoxGeometry(0.35, 0.22, 0.9), matSecondary);
+          claw.position.set(0, -3, 0.15 + cz);
+          legContainer.add(claw);
+        });
+        const anchorGlow = new Mesh(new BoxGeometry(0.9, 0.08, 0.1), matEmissive);
+        anchorGlow.position.set(0, -2.78, 1.08);
+        legContainer.add(anchorGlow);
       });
     } else {
       const pelvis = new Mesh(new CylinderGeometry(0.95, 1.08, 0.72, 6), matDark);
@@ -27315,6 +27687,26 @@
       vent.position.set(vx, torsoHeight * 0.18, torsoWidth * 0.42);
       torsoGroup.add(vent);
     });
+    if (equipped.armor === "ablative_armor") {
+      [-0.55, 0.55].forEach((ax) => {
+        const slab = new Mesh(new BoxGeometry(0.38, 0.8, 0.16), matSecondary);
+        slab.position.set(ax, -0.15, torsoWidth * 0.5 + 0.02);
+        torsoGroup.add(slab);
+        const stripe = new Mesh(new BoxGeometry(0.05, 0.62, 0.05), matEmissive);
+        stripe.position.set(ax, -0.15, torsoWidth * 0.5 + 0.12);
+        torsoGroup.add(stripe);
+      });
+    } else if (equipped.armor === "energy_armor") {
+      const weave = new Mesh(new TorusGeometry(torsoWidth * 0.62, 0.035, 6, 40), matEmissive);
+      weave.rotation.x = Math.PI / 2;
+      weave.position.y = -0.35;
+      torsoGroup.add(weave);
+      [-1, 1].forEach((sx) => {
+        const shimmer = new Mesh(new BoxGeometry(0.06, 0.9, 0.5), matEmissive);
+        shimmer.position.set(sx * (torsoWidth * 0.5 + 0.02), 0.1, 0.25);
+        torsoGroup.add(shimmer);
+      });
+    }
     [-1, 1].forEach((finSide) => {
       const fin = new Mesh(new BoxGeometry(0.1, 0.55, 0.8), matEmissive);
       fin.position.set(finSide * (torsoWidth * 0.68 + 0.72), 3.55, 0.15);
@@ -27342,6 +27734,7 @@
     scene.add(garageMechMesh);
   }
   function calculateMechStats() {
+    if (isGojo()) return { ...GOJO_STATS };
     let hp = 0, shield = 0, energy = 0, speed = 0, heatCool = 0, damage = 0;
     Object.keys(GAME_STATE.equipped).forEach((cat) => {
       const partId = GAME_STATE.equipped[cat];
@@ -27387,6 +27780,23 @@
   function renderPartList() {
     const grid = byId("parts-list-grid");
     grid.innerHTML = "";
+    if (isGojo()) {
+      GOJO_TECHNIQUES.forEach((tech) => {
+        const card = document.createElement("div");
+        card.className = "part-card equipped";
+        card.style.borderLeftColor = `#${tech.color.toString(16).padStart(6, "0")}`;
+        card.innerHTML = `
+                        <div class="part-title-row">
+                            <span class="part-name">${tech.name}</span>
+                            <span class="part-status status-equipped">EQUIPPED</span>
+                        </div>
+                        <div class="part-desc">${tech.desc}</div>
+                    `;
+        card.onclick = () => showFloatText("INNATE TECHNIQUE \u2014 ALWAYS ACTIVE", "#9fe8ff");
+        grid.appendChild(card);
+      });
+      return;
+    }
     const cat = GAME_STATE.activePartCategory;
     const parts = PARTS_DB[cat] || [];
     parts.forEach((part) => {
@@ -27447,6 +27857,19 @@
   function renderTechTree() {
     const container = byId("tech-nodes-list");
     container.innerHTML = "";
+    if (isGojo()) {
+      const card = document.createElement("div");
+      card.className = "part-card equipped";
+      card.innerHTML = `
+                    <div class="part-title-row">
+                        <span class="part-name">Innate Technique Matrix</span>
+                        <span class="part-status status-equipped">ALL ACTIVE</span>
+                    </div>
+                    <div class="part-desc">${GOJO_TECHNIQUES.map((t) => t.name.replace(/^.*: /, "")).join(" \xB7 ")}</div>
+                `;
+      container.appendChild(card);
+      return;
+    }
     TECH_NODES.forEach((tech) => {
       const card = document.createElement("div");
       card.className = `part-card ${tech.unlocked ? "equipped" : ""}`;
@@ -27493,9 +27916,11 @@
   function setArena(arenaId) {
     GAME_STATE.selectedArena = arenaId;
     sfx("hit");
-    ["foundry", "volcanic", "wasteland"].forEach((id) => {
+    ["foundry", "volcanic", "arctic"].forEach((id) => {
       byId(`arena-${id}`).classList.toggle("equipped", id === arenaId);
     });
+    const arena = ARENA_DEFS[arenaId];
+    if (arena) showFloatText(`${arena.name} SELECTED`, "#00f0ff");
   }
   function setGameMode(modeId) {
     GAME_STATE.selectedMode = modeId;
@@ -27518,17 +27943,69 @@
     byId("res-rp-val").innerText = GAME_STATE.rp.toLocaleString();
     byId("res-tokens-val").innerText = GAME_STATE.tokens.toLocaleString();
   }
+  function applyPilotNameUI() {
+    const input = byId("pilot-name");
+    input.value = GAME_STATE.username || "PILOT";
+    byId("hud-pilot-name").innerText = GAME_STATE.username || "PILOT";
+    const gojo = isGojo();
+    document.body.classList.toggle("gojo-view", gojo);
+    byId("part-category-selector").style.display = gojo ? "none" : "flex";
+    document.querySelectorAll("#main-nav .nav-tab").forEach((btn) => {
+      const onclick = btn.getAttribute("onclick") || "";
+      if (onclick.includes("research")) btn.style.display = gojo ? "none" : "";
+    });
+    if (gojo && GAME_STATE.currentTab === "research") switchTab("garage");
+  }
+  function applyPilotName() {
+    const input = byId("pilot-name");
+    if (GAME_STATE.inBattle) {
+      input.value = GAME_STATE.username;
+      return;
+    }
+    GAME_STATE.username = (input.value || "").trim().slice(0, 18).toUpperCase() || "PILOT";
+    input.value = GAME_STATE.username;
+    saveGame();
+    applyPilotNameUI();
+    renderPartList();
+    renderTechTree();
+    refreshStatsUI();
+    updateGarageMechDisplay();
+  }
   var keys = {};
   var mousePos = new Vector2();
   function setupInputControls() {
     window.addEventListener("keydown", (e) => {
-      if (GAME_STATE.inBattle && ["KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft"].includes(e.code)) e.preventDefault();
+      if (GAME_STATE.inBattle && ["KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "Backslash", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Numpad1", "Numpad2", "Numpad3", "Numpad4", "Numpad5"].includes(e.code)) e.preventDefault();
       keys[e.code] = true;
-      if (GAME_STATE.inBattle && e.code === "Space") tryBoostDash();
-      if (GAME_STATE.inBattle && e.code === "ShiftLeft") toggleWingmanHold();
+      if (GAME_STATE.inBattle && e.code === "Space" && !e.repeat) tryBoostDash();
+      if (GAME_STATE.inBattle && e.code === "ShiftLeft" && !e.repeat) toggleWingmanHold();
+      if (GAME_STATE.inBattle && e.code === "Backslash" && !e.repeat) setFirstPerson(!firstPersonView);
+      if (GAME_STATE.inBattle && isGojo() && !e.repeat) {
+        if (e.code === "Digit1" || e.code === "Numpad1") castGojoBlue();
+        else if (e.code === "Digit2" || e.code === "Numpad2") castGojoRed();
+        else if (e.code === "Digit3" || e.code === "Numpad3") castHollowPurple();
+        else if (e.code === "Digit4" || e.code === "Numpad4") toggleGojoInfinity();
+        else if (e.code === "Digit5" || e.code === "Numpad5") castGojoDomain();
+      }
     });
     window.addEventListener("keyup", (e) => keys[e.code] = false);
     window.addEventListener("mousemove", (e) => {
+      if (firstPersonView) {
+        let dx = 0, dy = 0;
+        if (document.pointerLockElement === renderer.domElement) {
+          dx = e.movementX;
+          dy = e.movementY;
+        } else if (fpLastMouseX >= 0 && fpLastMouseY >= 0) {
+          dx = e.clientX - fpLastMouseX;
+          dy = e.clientY - fpLastMouseY;
+        }
+        fpLastMouseX = e.clientX;
+        fpLastMouseY = e.clientY;
+        const sens = 22e-4;
+        fpYaw -= dx * sens;
+        fpPitch = MathUtils.clamp(fpPitch - dy * sens, -1.32, 1.32);
+        return;
+      }
       mousePos.x = e.clientX / window.innerWidth * 2 - 1;
       mousePos.y = -(e.clientY / window.innerHeight) * 2 + 1;
       const reticle = byId("reticle-circle");
@@ -27545,6 +28022,17 @@
     window.addEventListener("blur", () => {
       mouseDown = false;
       keys = {};
+    });
+    document.addEventListener("pointerlockchange", () => {
+      const locked = document.pointerLockElement === renderer.domElement;
+      if (locked) {
+        fpLockAcquired = true;
+        return;
+      }
+      if (firstPersonView && fpLockAcquired) {
+        fpLockAcquired = false;
+        setFirstPerson(false, true);
+      }
     });
   }
   function startCombatDeployment() {
@@ -27611,7 +28099,9 @@
       hitFlash: 0
     };
     playerEntity.mesh.position.copy(playerEntity.position);
+    playerMomentum.set(0, 0, 0);
     scene.add(playerEntity.mesh);
+    if (isGojo()) clearGojoEffects();
     spawnEnemyWave(1);
     spawnWingmanDrone();
     byId("target-hud-card").style.opacity = "1";
@@ -27623,14 +28113,13 @@
     pickups = [];
     pickupPads = [];
     arenaLavaPools = [];
+    arenaIcePatches = [];
+    arenaCoolVents = [];
+    arenaIcePatches = [];
+    arenaCoolVents = [];
     const arenaEnv = new Group();
     arenaEnv.name = "arena_env";
-    const ARENA_THEMES = {
-      foundry: { floor: 1449e3, fog: 658966, fogD: 75e-4, primary: 1976635, accent: 16733440, hemi: 3820134, sun: 16773862, sunI: 1.5 },
-      volcanic: { floor: 2756362, fog: 1705219, fogD: 0.011, primary: 4003858, accent: 16729088, hemi: 6692885, sun: 16756864, sunI: 1.7 },
-      wasteland: { floor: 1318956, fog: 660511, fogD: 0.012, primary: 2372415, accent: 6740479, hemi: 2771558, sun: 12577023, sunI: 1.3 }
-    };
-    const theme = ARENA_THEMES[GAME_STATE.selectedArena] || ARENA_THEMES.foundry;
+    const theme = getArenaDef();
     scene.background = new Color(theme.fog);
     scene.fog = new FogExp2(theme.fog, theme.fogD);
     scene.traverse((o) => {
@@ -27655,64 +28144,143 @@
     grid.material.transparent = true;
     grid.material.opacity = 0.25;
     arenaEnv.add(grid);
-    for (let i = 0; i < 22; i++) {
-      const px2 = (Math.random() - 0.5) * 220;
-      const pz2 = (Math.random() - 0.5) * 220;
-      if (Math.hypot(px2, pz2 - 30) < 18 || Math.hypot(px2, pz2 + 40) < 18) continue;
-      const h = 14 + Math.random() * 10;
-      const pillar = new Mesh(
-        new BoxGeometry(9, h, 9),
-        new MeshStandardMaterial({ color: theme.primary, roughness: 0.45, metalness: 0.75, map: METAL_TEXTURE, bumpMap: BUMP_TEXTURE, bumpScale: 0.06 })
-      );
+    const addCover = (px2, pz2, w, h, d, colorHex, opts) => {
+      const coverColor = colorHex || theme.primary;
+      const mat = opts?.ice ? new MeshStandardMaterial({ color: coverColor, roughness: 0.15, metalness: 0.15, transparent: true, opacity: 0.82 }) : new MeshStandardMaterial({ color: coverColor, roughness: 0.45, metalness: 0.75, map: METAL_TEXTURE, bumpMap: BUMP_TEXTURE, bumpScale: 0.06 });
+      const pillar = new Mesh(new BoxGeometry(w, h, d), mat);
       pillar.position.set(px2, h / 2, pz2);
+      if (opts?.rotY) pillar.rotation.y = opts.rotY;
       pillar.castShadow = true;
       pillar.receiveShadow = true;
       arenaEnv.add(pillar);
       const cap = new Mesh(
-        new BoxGeometry(9.6, 0.5, 9.6),
+        new BoxGeometry(w * 1.06, 0.5, d * 1.06),
         new MeshStandardMaterial({ color: theme.accent, emissive: theme.accent, emissiveIntensity: 1.4 })
       );
       cap.position.set(px2, h + 0.25, pz2);
+      if (opts?.rotY) cap.rotation.y = opts.rotY;
       arenaEnv.add(cap);
       const base = new Mesh(
-        new BoxGeometry(10, 0.6, 10),
+        new BoxGeometry(w * 1.1, 0.6, d * 1.1),
         new MeshStandardMaterial({ color: 921879, roughness: 0.6, metalness: 0.8 })
       );
       base.position.set(px2, 0.3, pz2);
       arenaEnv.add(base);
-      arenaObstacles.push({ mesh: pillar, pos: new Vector3(px2, 0, pz2), halfSize: 4.5 });
-    }
-    if (GAME_STATE.selectedArena === "volcanic") {
-      for (let i = 0; i < 10; i++) {
-        const x = (Math.random() - 0.5) * 240, z = (Math.random() - 0.5) * 240;
-        if (Math.hypot(x, z - 30) < 14 || Math.hypot(x, z + 40) < 14) continue;
-        const lava = new Mesh(
-          new CircleGeometry(3 + Math.random() * 3, 24),
-          new MeshBasicMaterial({ color: 16724736 })
+      arenaObstacles.push({ mesh: pillar, pos: new Vector3(px2, 0, pz2), halfSize: Math.max(w, d) / 2 });
+    };
+    if (theme.layout === "foundry") {
+      [-96, -48, 48, 96].forEach((px2) => {
+        [-96, -48, 48, 96].forEach((pz2) => {
+          addCover(px2, pz2, 9, 14 + Math.random() * 8, 9);
+        });
+      });
+      [-110, 110].forEach((gz) => {
+        const beam = new Mesh(
+          new BoxGeometry(240, 2.2, 5),
+          new MeshStandardMaterial({ color: 2239288, roughness: 0.5, metalness: 0.85 })
         );
+        beam.position.set(0, 21, gz);
+        arenaEnv.add(beam);
+        [-100, -50, 50, 100].forEach((gx) => {
+          const strut = new Mesh(new BoxGeometry(2, 21, 2), new MeshStandardMaterial({ color: 1712688, roughness: 0.55, metalness: 0.85 }));
+          strut.position.set(gx, 10.5, gz);
+          arenaEnv.add(strut);
+        });
+      });
+      [[36, 0], [-36, 0], [0, 44], [0, -44]].forEach(([vx, vz]) => {
+        const vent = new Mesh(
+          new CylinderGeometry(4.6, 5, 0.35, 26),
+          new MeshStandardMaterial({ color: 858658, emissive: 61695, emissiveIntensity: 0.75 })
+        );
+        vent.position.set(vx, 0.18, vz);
+        arenaEnv.add(vent);
+        const ventRing = new Mesh(
+          new TorusGeometry(4.9, 0.12, 8, 32),
+          new MeshBasicMaterial({ color: 9369343 })
+        );
+        ventRing.rotation.x = -Math.PI / 2;
+        ventRing.position.set(vx, 0.4, vz);
+        arenaEnv.add(ventRing);
+        arenaCoolVents.push({ x: vx, z: vz, r: 5.2 });
+      });
+      const glow = new PointLight(16733440, 1.2, 120);
+      glow.position.set(0, 24, 0);
+      arenaEnv.add(glow);
+    } else if (theme.layout === "volcanic") {
+      for (let i = 0; i < 16; i++) {
+        const px2 = (Math.random() - 0.5) * 210;
+        const pz2 = (Math.random() - 0.5) * 210;
+        if (Math.hypot(px2, pz2 - 30) < 20 || Math.hypot(px2, pz2 + 45) < 20) continue;
+        if (Math.hypot(px2, pz2) < 26) continue;
+        addCover(px2, pz2, 6 + Math.random() * 7, 10 + Math.random() * 16, 6 + Math.random() * 7, theme.primary, { rotY: Math.random() * Math.PI });
+      }
+      const caldera = new Mesh(
+        new CircleGeometry(16, 40),
+        new MeshBasicMaterial({ color: 16730624 })
+      );
+      caldera.rotation.x = -Math.PI / 2;
+      caldera.position.set(0, 0.06, -8);
+      arenaEnv.add(caldera);
+      arenaLavaPools.push({ x: 0, z: -8, r: 15 });
+      for (let i = 0; i < 12; i++) {
+        const a = i / 12 * Math.PI * 2;
+        const tooth = new Mesh(
+          new ConeGeometry(1.5, 4 + Math.random() * 3, 5),
+          new MeshStandardMaterial({ color: 1772810, roughness: 0.85, metalness: 0.2 })
+        );
+        tooth.position.set(Math.cos(a) * 19, 2, -8 + Math.sin(a) * 19);
+        tooth.castShadow = true;
+        arenaEnv.add(tooth);
+      }
+      for (let i = 0; i < 9; i++) {
+        const x = (Math.random() - 0.5) * 230, z = (Math.random() - 0.5) * 230;
+        if (Math.hypot(x, z - 30) < 16 || Math.hypot(x, z + 45) < 16) continue;
+        if (Math.hypot(x, z + 8) < 24) continue;
+        const lava = new Mesh(new CircleGeometry(2.6 + Math.random() * 3.2, 24), new MeshBasicMaterial({ color: 16724736 }));
         lava.rotation.x = -Math.PI / 2;
         lava.position.set(x, 0.05, z);
         arenaEnv.add(lava);
         arenaLavaPools.push({ x, z, r: lava.geometry.parameters.radius });
       }
-      const glow = new PointLight(16729088, 1.6, 90);
-      glow.position.set(0, 18, 0);
+      const glow = new PointLight(16729088, 2.2, 140);
+      glow.position.set(0, 16, -8);
       arenaEnv.add(glow);
     } else {
-      arenaLavaPools = [];
-    }
-    if (GAME_STATE.selectedArena === "wasteland") {
-      for (let i = 0; i < 8; i++) {
-        const ice = new Mesh(
-          new ConeGeometry(1.6 + Math.random() * 2, 3 + Math.random() * 5, 6),
-          new MeshStandardMaterial({ color: 10475775, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.75 })
-        );
-        ice.position.set((Math.random() - 0.5) * 240, 1.5, (Math.random() - 0.5) * 240);
-        ice.castShadow = true;
-        arenaEnv.add(ice);
+      for (let i = 0; i < 12; i++) {
+        const px2 = (Math.random() - 0.5) * 220;
+        const pz2 = (Math.random() - 0.5) * 220;
+        if (Math.hypot(px2, pz2 - 30) < 20 || Math.hypot(px2, pz2 + 45) < 20) continue;
+        addCover(px2, pz2, 7 + Math.random() * 6, 8 + Math.random() * 14, 7 + Math.random() * 6, 10475775, { rotY: Math.random() * Math.PI, ice: true });
       }
+      for (let i = 0; i < 16; i++) {
+        const spire = new Mesh(
+          new ConeGeometry(1.1 + Math.random() * 1.9, 6 + Math.random() * 12, 6),
+          new MeshStandardMaterial({ color: 12577535, roughness: 0.1, metalness: 0.05, transparent: true, opacity: 0.7 })
+        );
+        spire.position.set((Math.random() - 0.5) * 250, 4, (Math.random() - 0.5) * 250);
+        spire.rotation.z = (Math.random() - 0.5) * 0.25;
+        spire.castShadow = true;
+        arenaEnv.add(spire);
+      }
+      for (let i = 0; i < 10; i++) {
+        const x = (Math.random() - 0.5) * 220, z = (Math.random() - 0.5) * 220;
+        if (Math.hypot(x, z - 30) < 14) continue;
+        const r = 5 + Math.random() * 6;
+        const ice = new Mesh(
+          new CircleGeometry(r, 30),
+          new MeshStandardMaterial({ color: 9426175, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.5 })
+        );
+        ice.rotation.x = -Math.PI / 2;
+        ice.position.set(x, 0.055, z);
+        arenaEnv.add(ice);
+        arenaIcePatches.push({ x, z, r });
+      }
+      const glow = new PointLight(9426175, 1.4, 150);
+      glow.position.set(0, 22, 0);
+      arenaEnv.add(glow);
     }
-    const crateMat = new MeshStandardMaterial({ color: 9071162, roughness: 0.8, metalness: 0.2, map: METAL_TEXTURE });
+    const crateColor = theme.layout === "arctic" ? 7311267 : theme.layout === "volcanic" ? 5913130 : 9071162;
+    const crateMat = new MeshStandardMaterial({ color: crateColor, roughness: 0.8, metalness: 0.2, map: METAL_TEXTURE });
     const barrelMat = new MeshStandardMaterial({ color: 13378048, roughness: 0.5, metalness: 0.6, emissive: 3342336 });
     for (let i = 0; i < 14; i++) {
       const x = (Math.random() - 0.5) * 200, z = (Math.random() - 0.5) * 200;
@@ -27732,10 +28300,15 @@
         kind: isBarrel ? "barrel" : "crate"
       });
     }
-    [[-60, -60], [60, -60], [-60, 60], [60, 60]].forEach(([x, z]) => {
+    const padSpots = {
+      foundry: [[-60, -60], [60, -60], [-60, 60], [60, 60]],
+      volcanic: [[-70, 10], [70, 10], [0, 70]],
+      arctic: [[-55, -30], [55, -30], [0, 55], [-95, 90]]
+    };
+    (padSpots[theme.layout] || padSpots.foundry).forEach(([x, z]) => {
       const pad = new Mesh(
         new CylinderGeometry(3, 3.4, 0.4, 24),
-        new MeshStandardMaterial({ color: 1054752, emissive: 61695, emissiveIntensity: 0.6 })
+        new MeshStandardMaterial({ color: 1054752, emissive: theme.accent, emissiveIntensity: 0.6 })
       );
       pad.position.set(x, 0.2, z);
       arenaEnv.add(pad);
@@ -27746,23 +28319,30 @@
       const wall = new Mesh(new BoxGeometry(w, 10, d), wallMat);
       wall.position.set(x, 5, z);
       arenaEnv.add(wall);
+      const trim = new Mesh(
+        new BoxGeometry(w, 0.22, d + 0.2),
+        new MeshBasicMaterial({ color: theme.accent })
+      );
+      trim.position.set(x, 10.1, z);
+      arenaEnv.add(trim);
     });
     const dustGeo = new BufferGeometry();
-    const dustCount = 420;
+    const dustCount = theme.layout === "arctic" ? 900 : theme.layout === "volcanic" ? 300 : 420;
     const dustPositions = new Float32Array(dustCount * 3);
     for (let i = 0; i < dustCount; i++) {
       dustPositions[i * 3] = (Math.random() - 0.5) * 240;
-      dustPositions[i * 3 + 1] = 1 + Math.random() * 22;
+      dustPositions[i * 3 + 1] = 1 + Math.random() * (theme.layout === "arctic" ? 38 : 22);
       dustPositions[i * 3 + 2] = (Math.random() - 0.5) * 240;
     }
     dustGeo.setAttribute("position", new BufferAttribute(dustPositions, 3));
-    arenaDust = new Points(dustGeo, new PointsMaterial({ color: 10466505, size: 0.35, transparent: true, opacity: 0.25, fog: false }));
+    const dustColor = theme.layout === "arctic" ? 16777215 : theme.layout === "volcanic" ? 16746564 : 10466505;
+    arenaDust = new Points(dustGeo, new PointsMaterial({ color: dustColor, size: theme.layout === "arctic" ? 0.45 : 0.35, transparent: true, opacity: theme.layout === "arctic" ? 0.55 : 0.25, fog: false }));
+    arenaDust.userData.snow = theme.layout === "arctic";
     arenaEnv.add(arenaDust);
-    const floodColor = theme.accent || 16733440;
     [[-120, -120], [120, -120], [-120, 120], [120, 120]].forEach(([fx, fz]) => {
       const beam = new Mesh(
         new ConeGeometry(14, 30, 16, 1, true),
-        new MeshBasicMaterial({ color: floodColor, transparent: true, opacity: 0.05, side: DoubleSide, blending: AdditiveBlending, depthWrite: false, fog: false })
+        new MeshBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.05, side: DoubleSide, blending: AdditiveBlending, depthWrite: false, fog: false })
       );
       beam.position.set(fx, 15, fz);
       beam.rotation.x = Math.PI;
@@ -27886,67 +28466,952 @@
   }
   function firePlayerWeapon() {
     if (!playerEntity || playerEntity.overheated) return;
-    const stats = calculateMechStats();
-    const armsId = GAME_STATE.equipped.arms;
-    const fireCost = armsId === "plasma_arms" ? 26 : armsId === "railgun_arms" ? 42 : 14;
+    if (isGojo()) {
+      if (!gojoPurple && gojoTimers.purple <= 0) castHollowPurple();
+      return;
+    }
+    const profile = getWeaponProfile();
+    if (profile.kind === "beam") return;
+    const arms = getArmsPart();
     const now2 = performance.now();
-    const interval = armsId === "plasma_arms" ? 420 : armsId === "railgun_arms" ? 950 : 95;
-    if (now2 - playerEntity.lastFireTime < interval) return;
+    if (now2 - playerEntity.lastFireTime < profile.interval * 1e3) return;
     playerEntity.lastFireTime = now2;
-    if (playerEntity.heat + fireCost >= 100) {
+    const heatCost = (arms?.heatRate || 6) * arenaHeatGain();
+    if (playerEntity.heat + heatCost >= 100) {
       playerEntity.overheated = true;
       sfx("overheat");
       showFloatText("\u26A0 OVERHEAT \u2014 VENTING", "#ff5533");
       return;
     }
-    playerEntity.heat += fireCost;
-    const raycaster = new Raycaster();
-    raycaster.setFromCamera(mousePos, camera);
-    const plane = new Plane(new Vector3(0, 1, 0), -2);
-    const targetPoint = new Vector3();
-    raycaster.ray.intersectPlane(plane, targetPoint);
-    const barrelTips = [];
-    playerEntity.mesh.traverse((child) => {
-      if (child.name === "barrelTip") {
-        const worldPos = new Vector3();
-        child.getWorldPosition(worldPos);
-        barrelTips.push(worldPos);
+    playerEntity.heat += heatCost;
+    const targetPoint = getAimPoint();
+    const tips = getBarrelTips();
+    const spawnPos = getMuzzlePosition(tips);
+    const fireDir = targetPoint.clone().sub(spawnPos).normalize();
+    const damage = (arms?.damage || 320) * profile.damageMult;
+    if (profile.kind === "grenade") {
+      const shell = new Group();
+      const body = new Mesh(
+        new CylinderGeometry(0.2, 0.26, 0.72, 8),
+        new MeshBasicMaterial({ color: profile.color })
+      );
+      body.rotateX(Math.PI / 2);
+      shell.add(body);
+      const fuse = new Mesh(
+        new SphereGeometry(0.1, 8, 8),
+        new MeshBasicMaterial({ color: 16720384 })
+      );
+      fuse.position.z = 0.4;
+      shell.add(fuse);
+      [-1, 1].forEach((fx) => {
+        const fin = new Mesh(new BoxGeometry(0.05, 0.24, 0.3), new MeshBasicMaterial({ color: 1777448 }));
+        fin.position.set(fx * 0.22, 0, -0.3);
+        shell.add(fin);
+      });
+      if (profile.trail) {
+        const glow = new Mesh(
+          new SphereGeometry(0.36, 8, 8),
+          new MeshBasicMaterial({ color: profile.color, transparent: true, opacity: 0.3 })
+        );
+        shell.add(glow);
+      }
+      shell.position.copy(spawnPos);
+      scene.add(shell);
+      const lobDir = fireDir.clone();
+      lobDir.y += 0.34;
+      lobDir.normalize();
+      projectiles.push({
+        mesh: shell,
+        dir: lobDir,
+        speed: profile.speed,
+        isPlayer: true,
+        damage,
+        life: 2.6,
+        pierce: false,
+        trailColor: profile.color,
+        gravity: 1.15,
+        splashRadius: profile.splashRadius,
+        splashDamage: damage * 0.85
+      });
+    } else {
+      let geo;
+      let color = profile.color;
+      let pierceLeft = 0;
+      if (profile.kind === "rail") {
+        geo = new BoxGeometry(0.12, 0.12, 5.4);
+        color = 16777215;
+        pierceLeft = 3;
+      } else if (profile.kind === "plasma") {
+        geo = new SphereGeometry(profile.size + 0.12, 14, 14);
+        color = 6750156;
+      } else {
+        geo = new CylinderGeometry(profile.size * 0.7, profile.size * 0.7, 1.9, 8);
+        geo.rotateX(Math.PI / 2);
+        color = GAME_STATE.paint.emissive;
+      }
+      const proj = new Mesh(geo, new MeshBasicMaterial({ color }));
+      proj.position.copy(spawnPos);
+      proj.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), fireDir);
+      if (profile.kind === "plasma") {
+        const halo = new Mesh(
+          new SphereGeometry(profile.size + 0.34, 10, 10),
+          new MeshBasicMaterial({ color, transparent: true, opacity: 0.28, blending: AdditiveBlending, depthWrite: false })
+        );
+        proj.add(halo);
+      }
+      scene.add(proj);
+      projectiles.push({
+        mesh: proj,
+        dir: fireDir,
+        speed: profile.speed,
+        isPlayer: true,
+        damage,
+        life: 2.2,
+        pierce: profile.kind === "rail",
+        trailColor: color,
+        pierceLeft,
+        splashRadius: profile.splashRadius,
+        splashDamage: profile.splashRadius ? damage * 0.5 : void 0
+      });
+      if (profile.kind === "rail") spawnRailTracer(spawnPos, fireDir);
+    }
+    spawnMuzzleFlash(spawnPos, fireDir, profile.kind === "rail" ? 2.4 : profile.kind === "grenade" ? 1.6 : 1.2, profile.color);
+    sfx(profile.sfx);
+    cameraShake = Math.max(cameraShake, profile.recoil);
+  }
+  function spawnRailTracer(pos, dir) {
+    const geo = new CylinderGeometry(0.05, 0.05, 9, 6);
+    geo.rotateX(Math.PI / 2);
+    const streak = new Mesh(geo, new MeshBasicMaterial({ color: 16777215, transparent: true, opacity: 0.8, blending: AdditiveBlending, depthWrite: false }));
+    streak.position.copy(pos).addScaledVector(dir, 3.5);
+    streak.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), dir);
+    scene.add(streak);
+    particles.push({ mesh: streak, vel: new Vector3(), life: 0.12, maxLife: 0.12, fade: true });
+  }
+  function buildHeliosBeamMesh() {
+    if (heliosBeam) return heliosBeam;
+    const beam = new Group();
+    const coreGeo = new CylinderGeometry(0.09, 0.09, 1, 8, 1, true);
+    coreGeo.rotateX(Math.PI / 2);
+    coreGeo.translate(0, 0, 0.5);
+    const core = new Mesh(coreGeo, new MeshBasicMaterial({ color: 15138815 }));
+    core.name = "beamCore";
+    beam.add(core);
+    const glowGeo = new CylinderGeometry(0.4, 0.4, 1, 12, 1, true);
+    glowGeo.rotateX(Math.PI / 2);
+    glowGeo.translate(0, 0, 0.5);
+    const glow = new Mesh(glowGeo, new MeshBasicMaterial({
+      color: 9369343,
+      transparent: true,
+      opacity: 0.32,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      side: DoubleSide
+    }));
+    glow.name = "beamGlow";
+    beam.add(glow);
+    const impactGeo = new SphereGeometry(0.55, 10, 10);
+    const impact = new Mesh(impactGeo, new MeshBasicMaterial({
+      color: 16777215,
+      transparent: true,
+      opacity: 0.9,
+      blending: AdditiveBlending,
+      depthWrite: false
+    }));
+    impact.name = "beamImpact";
+    beam.add(impact);
+    scene.add(beam);
+    heliosBeam = beam;
+    return beam;
+  }
+  function hideHeliosBeam() {
+    if (!heliosBeam) return;
+    scene.remove(heliosBeam);
+    heliosBeam.traverse((o) => {
+      const m = o;
+      if (m.isMesh) {
+        m.geometry.dispose();
+        const mat = m.material;
+        if (mat) mat.dispose();
       }
     });
-    let spawnPos = playerEntity.mesh.position.clone().add(new Vector3(0, 2.2, 0));
-    if (barrelTips.length > 0) {
-      activeWeaponBarrelIndex = (activeWeaponBarrelIndex + 1) % barrelTips.length;
-      spawnPos = barrelTips[activeWeaponBarrelIndex];
-    }
-    const isRail = armsId === "railgun_arms";
-    const isPlasma = armsId === "plasma_arms";
-    const fireDir = targetPoint.clone().sub(spawnPos).normalize();
-    const projGeo = isRail ? (() => {
-      const g = new BoxGeometry(0.14, 0.14, 4.5);
-      return g;
-    })() : (() => {
-      const g = new CylinderGeometry(isPlasma ? 0.3 : 0.18, isPlasma ? 0.3 : 0.18, isPlasma ? 1.2 : 1.8, 8);
-      g.rotateX(Math.PI / 2);
-      return g;
-    })();
-    const projColor = isRail ? 16777215 : isPlasma ? 6750156 : GAME_STATE.paint.emissive;
-    const proj = new Mesh(projGeo, new MeshBasicMaterial({ color: projColor }));
-    proj.position.copy(spawnPos);
-    proj.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), fireDir);
-    projectiles.push({
-      mesh: proj,
-      dir: fireDir,
-      speed: isRail ? 320 : isPlasma ? 140 : 180,
-      isPlayer: true,
-      damage: (stats.damage || 350) * (isRail ? 1 : isPlasma ? 0.42 : 0.16),
-      life: 2,
-      pierce: isRail,
-      trailColor: projColor
+    heliosBeam = null;
+    heliosBeamTick = 0;
+    heliosBeamHitFx = 0;
+  }
+  function disposeObject3D(obj) {
+    obj.traverse((o) => {
+      const renderable = o;
+      if (!(renderable.isMesh || renderable.isLine || renderable.isPoints || renderable.isSprite)) return;
+      if (renderable.geometry) renderable.geometry.dispose();
+      const mat = renderable.material;
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+      else if (mat) mat.dispose();
     });
-    scene.add(proj);
-    spawnMuzzleFlash(spawnPos, fireDir, isRail ? 2.4 : 1.2, projColor);
-    sfx(isRail ? "rail" : isPlasma ? "plasma" : "cannon");
-    cameraShake = Math.max(cameraShake, isRail ? 0.55 : isPlasma ? 0.3 : 0.22);
+  }
+  function clearGojoEffects() {
+    if (gojoBlueOrb) {
+      scene.remove(gojoBlueOrb.mesh);
+      disposeObject3D(gojoBlueOrb.mesh);
+      gojoBlueOrb = null;
+    }
+    if (gojoPurple) {
+      scene.remove(gojoPurple.mesh);
+      disposeObject3D(gojoPurple.mesh);
+      gojoPurple = null;
+    }
+    destroyGojoDomain();
+    gojoTimers = { blue: 0, red: 0, purple: 0, domain: 0 };
+    gojoInfinityOn = true;
+    gojoInfinityFx = 0;
+    gojoBloom = 0;
+  }
+  function getStarTexture() {
+    if (starTexture) return starTexture;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 64;
+    const ctx = canvas.getContext("2d");
+    const grd = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grd.addColorStop(0, "rgba(255,255,255,1)");
+    grd.addColorStop(0.28, "rgba(243,232,255,0.95)");
+    grd.addColorStop(0.62, "rgba(192,132,252,0.35)");
+    grd.addColorStop(1, "rgba(124,58,237,0)");
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, 64, 64);
+    starTexture = new CanvasTexture(canvas);
+    return starTexture;
+  }
+  function getGlowTexture() {
+    if (glowTexture) return glowTexture;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    const grd = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grd.addColorStop(0, "rgba(255,255,255,1)");
+    grd.addColorStop(0.18, "rgba(243,232,255,0.95)");
+    grd.addColorStop(0.42, "rgba(192,132,252,0.55)");
+    grd.addColorStop(0.72, "rgba(124,58,237,0.18)");
+    grd.addColorStop(1, "rgba(76,29,149,0)");
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, 128, 128);
+    glowTexture = new CanvasTexture(canvas);
+    return glowTexture;
+  }
+  function castHollowPurple() {
+    if (!playerEntity) return;
+    if (gojoTimers.purple > 0) {
+      sfx("deny");
+      showFloatText(`HOLLOW PURPLE RECHARGING \u2014 ${Math.ceil(gojoTimers.purple)}s`, "#d8b4fe");
+      return;
+    }
+    if (gojoPurple) return;
+    gojoTimers.purple = 4.5;
+    const p = playerEntity.position;
+    const muzzle = p.clone().setY(4.6);
+    if (firstPersonView) muzzle.copy(p).setY(4.95).addScaledVector(getFPCameraDir(), 8);
+    let dir = getAimPoint().sub(muzzle);
+    if (dir.lengthSq() < 0.01) dir.set(0, 0, -1);
+    dir.normalize();
+    const assist = gojoNearestTarget(100);
+    if (assist) {
+      const toTarget = assist.position.clone().setY(2.7 * assist.scale).sub(muzzle);
+      if (toTarget.lengthSq() > 0.01) {
+        const toDir = toTarget.clone().normalize();
+        if (toDir.dot(dir) > 0.05) dir.copy(toDir);
+      }
+    }
+    if (dir.y < -0.12) {
+      dir.y = -0.12;
+      dir.normalize();
+    }
+    const g = new Group();
+    g.position.copy(muzzle);
+    g.add(new Mesh(
+      new SphereGeometry(1.4, 24, 24),
+      new MeshBasicMaterial({ color: 8141549, transparent: true, opacity: 0.06, blending: AdditiveBlending, depthWrite: false })
+    ));
+    const redOrb = new Mesh(
+      new SphereGeometry(0.85, 20, 20),
+      new MeshBasicMaterial({ color: 16726862, transparent: true, opacity: 0.95, blending: AdditiveBlending, depthWrite: false })
+    );
+    redOrb.position.set(-1.45, 0, 0);
+    g.add(redOrb);
+    const blueOrb = new Mesh(
+      new SphereGeometry(0.85, 20, 20),
+      new MeshBasicMaterial({ color: 3900159, transparent: true, opacity: 0.95, blending: AdditiveBlending, depthWrite: false })
+    );
+    blueOrb.position.set(1.45, 0, 0);
+    g.add(blueOrb);
+    const core = new Mesh(
+      new SphereGeometry(0.55, 20, 20),
+      new MeshBasicMaterial({ color: 12616956 })
+    );
+    core.scale.setScalar(0.15);
+    g.add(core);
+    const ring = new Mesh(
+      new TorusGeometry(1.6, 0.045, 8, 60),
+      new MeshBasicMaterial({ color: 14202110, transparent: true, opacity: 0.8, blending: AdditiveBlending, depthWrite: false })
+    );
+    ring.rotation.x = Math.PI / 2;
+    g.add(ring);
+    const halo = new Sprite(new SpriteMaterial({
+      map: getGlowTexture(),
+      color: 11032055,
+      transparent: true,
+      opacity: 0.15,
+      blending: AdditiveBlending,
+      depthWrite: false
+    }));
+    halo.scale.set(2.2, 2.2, 1);
+    g.add(halo);
+    g.add(new PointLight(11032055, 7, 42));
+    scene.add(g);
+    gojoPurple = {
+      mesh: g,
+      pos: muzzle.clone(),
+      dir,
+      state: "merge",
+      timer: 1,
+      life: 0,
+      trailTimer: 0,
+      redOrb,
+      blueOrb,
+      core
+    };
+    showFloatText("BLUE + RED \u2014 HOLLOW PURPLE", "#d8b4fe");
+    cameraShake = Math.max(cameraShake, 0.25);
+    gojoBloom = Math.max(gojoBloom, 0.4);
+    sfx("beam");
+  }
+  function detonateHollowPurple() {
+    if (!gojoPurple) return;
+    const shot = gojoPurple;
+    const pos = shot.mesh.position.clone();
+    scene.remove(shot.mesh);
+    disposeObject3D(shot.mesh);
+    gojoPurple = null;
+    for (const e of [...enemyEntities]) {
+      const d = e.position.distanceTo(pos);
+      if (d >= 20) continue;
+      const dmg = 7200 * (1 - d / 20 * 0.5);
+      applyDamageToEntity(e, dmg, e.position.clone().setY(2.4), "normal", true);
+      spawnDamageNumber(Math.ceil(dmg), e.position.clone().setY(3.7), "normal");
+      e.stun = Math.max(e.stun || 0, 0.6);
+    }
+    for (let i = 0; i < 3; i++) {
+      const ring = new Mesh(
+        new RingGeometry(0.7, 1.05, 64),
+        new MeshBasicMaterial({
+          color: i === 0 ? 16115967 : i === 1 ? 11032055 : 16734840,
+          transparent: true,
+          opacity: 0.9,
+          side: DoubleSide,
+          blending: AdditiveBlending,
+          depthWrite: false
+        })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(pos.x, 0.35 + i * 0.8, pos.z);
+      scene.add(ring);
+      particles.push({ mesh: ring, ring: true, vel: new Vector3(), life: 0.8 + i * 0.18, maxLife: 0.8 + i * 0.18, ringGrow: 58 + i * 22 });
+    }
+    const flash = new Mesh(
+      new SphereGeometry(1.4, 20, 20),
+      new MeshBasicMaterial({ color: 11766015, transparent: true, opacity: 0.65, blending: AdditiveBlending, depthWrite: false })
+    );
+    flash.position.copy(pos);
+    scene.add(flash);
+    particles.push({ mesh: flash, life: 0.4, maxLife: 0.4, scaleRate: 14, fade: true });
+    spawnExplosionParticles(pos, 11032055, 34, 38);
+    spawnExplosionParticles(pos, 16731501, 12, 28);
+    spawnExplosionParticles(pos, 5999871, 12, 28);
+    cameraShake = Math.max(cameraShake, 1.2);
+    gojoBloom = 1.5;
+    sfx("bigexplode");
+    showFloatText("HOLLOW PURPLE \u2014 ANNIHILATION", "#e9d5ff");
+  }
+  function updateGojoPurple(delta) {
+    if (!gojoPurple) return;
+    const shot = gojoPurple;
+    if (shot.state === "merge") {
+      shot.timer -= delta;
+      const t = 1 - Math.max(0, shot.timer) / 1;
+      const spin = t * Math.PI * 2.4;
+      const sep = 1.6 * (1 - t);
+      shot.redOrb.position.set(Math.cos(spin) * sep, Math.sin(spin) * sep * 0.45, Math.sin(spin * 0.7) * sep * 0.35);
+      shot.blueOrb.position.set(-Math.cos(spin) * sep, -Math.sin(spin) * sep * 0.45, -Math.sin(spin * 0.7) * sep * 0.35);
+      shot.core.scale.setScalar(0.06 + Math.max(0, t - 0.65) * 3.4);
+      shot.mesh.rotation.z += delta * 6;
+      if (shot.timer <= 0) {
+        shot.state = "fly";
+        shot.redOrb.visible = false;
+        shot.blueOrb.visible = false;
+        shot.core.scale.setScalar(1.25);
+        shot.mesh.scale.setScalar(1);
+        spawnExplosionParticles(shot.pos, 14202110, 14, 10);
+        gojoBloom = Math.max(gojoBloom, 1.1);
+        sfx("bigexplode");
+      }
+      shot.mesh.position.copy(shot.pos);
+      return;
+    }
+    shot.life += delta;
+    let homing = null, homingDist = 90;
+    for (const e of enemyEntities) {
+      const d = e.position.distanceTo(shot.pos);
+      if (d < homingDist) {
+        homingDist = d;
+        homing = e;
+      }
+    }
+    if (homing) {
+      const desired = homing.position.clone().setY(2.7 * homing.scale).sub(shot.pos).normalize();
+      shot.dir.lerp(desired, Math.min(1, delta * 1.8)).normalize();
+    }
+    shot.pos.addScaledVector(shot.dir, 92 * delta);
+    shot.mesh.position.copy(shot.pos);
+    shot.mesh.rotation.z += delta * 16;
+    shot.mesh.rotation.y += delta * 9;
+    shot.trailTimer -= delta;
+    if (shot.trailTimer <= 0) {
+      shot.trailTimer = 0.032;
+      const trailColors = [14202110, 11032055, 16734840, 5999871];
+      spawnExplosionParticles(shot.pos, trailColors[Math.floor(Math.random() * trailColors.length)], 1, 3);
+    }
+    let hit = false;
+    for (const e of enemyEntities) {
+      const center = e.position.clone().setY(2.7 * e.scale);
+      if (center.distanceTo(shot.pos) < e.radius + 2.4) {
+        hit = true;
+        break;
+      }
+    }
+    if (!hit) {
+      for (const obs of arenaObstacles) {
+        if (Math.abs(shot.pos.x - obs.pos.x) < obs.halfSize + 2 && Math.abs(shot.pos.z - obs.pos.z) < obs.halfSize + 2) {
+          hit = true;
+          break;
+        }
+      }
+    }
+    if (shot.pos.y < 0.8 || shot.life > 2.1) hit = true;
+    if (hit) detonateHollowPurple();
+    else gojoBloom = Math.max(gojoBloom, 0.3);
+  }
+  function gojoNearestTarget(maxDist) {
+    if (!playerEntity) return null;
+    let target = null, best = maxDist;
+    for (const e of enemyEntities) {
+      const d = e.position.distanceTo(playerEntity.position);
+      if (d < best) {
+        best = d;
+        target = e;
+      }
+    }
+    return target;
+  }
+  function castGojoBlue() {
+    if (!playerEntity) return;
+    if (gojoTimers.blue > 0) {
+      sfx("deny");
+      showFloatText(`BLUE RECHARGING \u2014 ${Math.ceil(gojoTimers.blue)}s`, "#7dd3fc");
+      return;
+    }
+    if (gojoBlueOrb) {
+      sfx("deny");
+      showFloatText("BLUE ALREADY ACTIVE", "#7dd3fc");
+      return;
+    }
+    const target = gojoNearestTarget(70);
+    if (!target) {
+      sfx("deny");
+      showFloatText("NO TARGET IN RANGE", "#7dd3fc");
+      return;
+    }
+    gojoTimers.blue = 7;
+    const g = new Group();
+    g.add(new Mesh(
+      new SphereGeometry(1.15, 16, 16),
+      new MeshBasicMaterial({ color: 3046399, transparent: true, opacity: 0.32, blending: AdditiveBlending, depthWrite: false })
+    ));
+    g.add(new Mesh(
+      new SphereGeometry(0.34, 12, 12),
+      new MeshBasicMaterial({ color: 14478335 })
+    ));
+    const ring = new Mesh(
+      new TorusGeometry(1.8, 0.05, 6, 40),
+      new MeshBasicMaterial({ color: 6990335, transparent: true, opacity: 0.8, blending: AdditiveBlending, depthWrite: false })
+    );
+    ring.rotation.x = Math.PI / 2;
+    g.add(ring);
+    const pos = target.position.clone().setY(2.8 * target.scale);
+    g.position.copy(pos);
+    scene.add(g);
+    gojoBlueOrb = { mesh: g, pos, life: 1.8 };
+    showFloatText("CURSED TECHNIQUE \u2014 BLUE", "#6aa9ff");
+    sfx("hit");
+  }
+  function castGojoRed() {
+    if (!playerEntity) return;
+    if (gojoTimers.red > 0) {
+      sfx("deny");
+      showFloatText(`RED RECHARGING \u2014 ${Math.ceil(gojoTimers.red)}s`, "#ff8a96");
+      return;
+    }
+    const p = playerEntity.position;
+    const inRange = enemyEntities.filter((e) => e.position.distanceTo(p) < 30);
+    if (!inRange.length) {
+      sfx("deny");
+      showFloatText("NO HOSTILES IN RANGE", "#ff8a96");
+      return;
+    }
+    gojoTimers.red = 7;
+    for (const e of inRange) {
+      const dir = e.position.clone().sub(p).setY(0).normalize();
+      e.position.addScaledVector(dir, 16);
+      applyDamageToEntity(e, 1400, e.position.clone().setY(2.4), "normal", true);
+      spawnDamageNumber(1400, e.position.clone().setY(3.6), "normal");
+    }
+    const ring = new Mesh(
+      new TorusGeometry(1.3, 0.2, 8, 48),
+      new MeshBasicMaterial({ color: 16723781, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(p.x, 0.6, p.z);
+    scene.add(ring);
+    particles.push({ mesh: ring, ring: true, vel: new Vector3(), life: 0.55, maxLife: 0.55, ringGrow: 44 });
+    spawnExplosionParticles(p.clone().setY(3), 16734822, 22, 26);
+    sfx("bigexplode");
+    cameraShake = Math.max(cameraShake, 0.5);
+    showFloatText("CURSED TECHNIQUE \u2014 RED", "#ff5a66");
+  }
+  function createVoidStarfield(center) {
+    const count = 900;
+    const positions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const r = 44 + Math.random() * 14;
+      positions[i * 3] = Math.sin(phi) * Math.cos(theta) * r;
+      positions[i * 3 + 1] = Math.cos(phi) * r;
+      positions[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * r;
+    }
+    const geo = new BufferGeometry();
+    geo.setAttribute("position", new BufferAttribute(positions, 3));
+    const starMat = new PointsMaterial({
+      color: 14202111,
+      size: 1.1,
+      transparent: true,
+      opacity: 0,
+      map: getStarTexture(),
+      alphaTest: 0.02,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true
+    });
+    const stars = new Points(geo, starMat);
+    stars.position.copy(center);
+    scene.add(stars);
+    return { stars, starMat };
+  }
+  function createVoidArcs(center) {
+    const positions = [];
+    for (let a = 0; a < 20; a++) {
+      const theta = Math.random() * Math.PI * 2;
+      const radius = 16 + Math.random() * 38;
+      let prev = new Vector3(
+        Math.cos(theta) * radius,
+        2 + Math.random() * 40,
+        Math.sin(theta) * radius
+      );
+      for (let s = 0; s < 5; s++) {
+        const next = prev.clone().add(new Vector3(
+          (Math.random() - 0.5) * 10,
+          (Math.random() - 0.5) * 9,
+          (Math.random() - 0.5) * 10
+        ));
+        positions.push(prev.x, prev.y, prev.z, next.x, next.y, next.z);
+        prev = next;
+      }
+    }
+    const geo = new BufferGeometry();
+    geo.setAttribute("position", new BufferAttribute(new Float32Array(positions), 3));
+    const arcMat = new LineBasicMaterial({
+      color: 12616956,
+      transparent: true,
+      opacity: 0,
+      blending: AdditiveBlending,
+      depthWrite: false
+    });
+    const arcs = new LineSegments(geo, arcMat);
+    arcs.position.copy(center);
+    scene.add(arcs);
+    return { arcs, arcMat };
+  }
+  function destroyGojoDomain() {
+    if (!gojoDomain) return;
+    const dome = gojoDomain;
+    scene.remove(dome.mesh);
+    disposeObject3D(dome.mesh);
+    scene.remove(dome.core);
+    disposeObject3D(dome.core);
+    scene.remove(dome.stars);
+    dome.stars.geometry.dispose();
+    dome.starMat.dispose();
+    scene.remove(dome.arcs);
+    dome.arcs.geometry.dispose();
+    dome.arcMat.dispose();
+    gojoDomain = null;
+    const overlay = byId("domain-overlay");
+    if (overlay) overlay.classList.remove("active");
+  }
+  function castGojoDomain() {
+    if (!playerEntity) return;
+    if (gojoTimers.domain > 0) {
+      sfx("deny");
+      showFloatText(`DOMAIN RECHARGING \u2014 ${Math.ceil(gojoTimers.domain)}s`, "#c9a2ff");
+      return;
+    }
+    if (gojoDomain) return;
+    const p = playerEntity.position;
+    const inRange = enemyEntities.filter((e) => e.position.distanceTo(p) < 60);
+    if (!inRange.length) {
+      sfx("deny");
+      showFloatText("NO HOSTILES IN DOMAIN RANGE", "#c9a2ff");
+      return;
+    }
+    gojoTimers.domain = 20;
+    const center = p.clone().setY(4);
+    const g = new Group();
+    g.position.copy(center);
+    const shell = new Mesh(
+      new SphereGeometry(1, 48, 32),
+      new MeshBasicMaterial({
+        color: 262154,
+        transparent: true,
+        opacity: 0.6,
+        side: BackSide,
+        depthWrite: false
+      })
+    );
+    g.add(shell);
+    const innerShell = new Mesh(
+      new SphereGeometry(1.004, 42, 28),
+      new MeshBasicMaterial({
+        color: 2820941,
+        transparent: true,
+        opacity: 0.22,
+        side: BackSide,
+        blending: AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    g.add(innerShell);
+    const rings = [];
+    for (let i = 0; i < 8; i++) {
+      const ring = new Mesh(
+        new TorusGeometry(0.52 + Math.random() * 0.44, 4e-3 + Math.random() * 0.01, 6, 110),
+        new MeshBasicMaterial({
+          color: i % 3 === 0 ? 15984895 : i % 2 === 0 ? 12616956 : 9133302,
+          transparent: true,
+          opacity: 0.3 + Math.random() * 0.35,
+          blending: AdditiveBlending,
+          depthWrite: false
+        })
+      );
+      ring.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      g.add(ring);
+      rings.push(ring);
+    }
+    const streamPositions = [];
+    for (let i = 0; i < 44; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const r = 0.55 + Math.random() * 0.42;
+      streamPositions.push(
+        0,
+        0,
+        0,
+        Math.sin(phi) * Math.cos(theta) * r,
+        Math.cos(phi) * r,
+        Math.sin(phi) * Math.sin(theta) * r
+      );
+    }
+    const streamGeo = new BufferGeometry();
+    streamGeo.setAttribute("position", new BufferAttribute(new Float32Array(streamPositions), 3));
+    g.add(new LineSegments(streamGeo, new LineBasicMaterial({
+      color: 11032055,
+      transparent: true,
+      opacity: 0.22,
+      blending: AdditiveBlending,
+      depthWrite: false
+    })));
+    for (let i = 0; i < 46; i++) {
+      const shard = new Mesh(
+        new TetrahedronGeometry(0.01 + Math.random() * 0.022, 0),
+        new MeshBasicMaterial({
+          color: i % 2 ? 14202110 : 9133302,
+          transparent: true,
+          opacity: 0.7,
+          blending: AdditiveBlending,
+          depthWrite: false
+        })
+      );
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const r = 0.35 + Math.random() * 0.56;
+      shard.position.set(
+        Math.sin(phi) * Math.cos(theta) * r,
+        Math.cos(phi) * r,
+        Math.sin(phi) * Math.sin(theta) * r
+      );
+      shard.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      g.add(shard);
+    }
+    scene.add(g);
+    const core = new Group();
+    core.position.copy(center);
+    core.add(new Mesh(
+      new SphereGeometry(1.15, 24, 24),
+      new MeshBasicMaterial({ color: 16115967 })
+    ));
+    const coreHalo = new Sprite(new SpriteMaterial({
+      map: getGlowTexture(),
+      color: 12616956,
+      transparent: true,
+      opacity: 0.95,
+      blending: AdditiveBlending,
+      depthWrite: false
+    }));
+    coreHalo.scale.set(14, 14, 1);
+    core.add(coreHalo);
+    core.add(new PointLight(11032055, 6, 140));
+    scene.add(core);
+    const { stars, starMat } = createVoidStarfield(center);
+    const { arcs, arcMat } = createVoidArcs(center);
+    gojoDomain = { mesh: g, life: 3.2, stars, starMat, arcs, arcMat, core, rings };
+    for (const e of inRange) e.stun = Math.max(e.stun || 0, 2.8);
+    const overlay = byId("domain-overlay");
+    if (overlay) overlay.classList.add("active");
+    for (let i = 0; i < 3; i++) {
+      const ring = new Mesh(
+        new RingGeometry(0.7, 1.1, 72),
+        new MeshBasicMaterial({
+          color: i === 0 ? 15984895 : 11032055,
+          transparent: true,
+          opacity: 0.9,
+          side: DoubleSide,
+          blending: AdditiveBlending,
+          depthWrite: false
+        })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(p.x, 0.3 + i * 0.5, p.z);
+      scene.add(ring);
+      particles.push({ mesh: ring, ring: true, vel: new Vector3(), life: 0.9 + i * 0.15, maxLife: 0.9 + i * 0.15, ringGrow: 75 + i * 30 });
+    }
+    showFloatText("DOMAIN EXPANSION \u2014 UNLIMITED VOID", "#c9a2ff");
+    sfx("bigexplode");
+    cameraShake = Math.max(cameraShake, 0.9);
+    gojoBloom = Math.max(gojoBloom, 2.6);
+  }
+  function toggleGojoInfinity() {
+    gojoInfinityOn = !gojoInfinityOn;
+    showFloatText(gojoInfinityOn ? "INFINITY \u2014 ACTIVE" : "INFINITY \u2014 RELEASED", gojoInfinityOn ? "#9fe8ff" : "#ff8a66");
+    sfx("hit");
+  }
+  function updateGojoAbilityHUD() {
+    if (!isGojo()) return;
+    const set = (id, text, cooling, off = false, firing = false) => {
+      const root = byId(`gab-${id}`);
+      byId(`gab-${id}-state`).innerText = text;
+      root.classList.toggle("cooling", cooling);
+      root.classList.toggle("off", off);
+      root.classList.toggle("firing", firing);
+    };
+    set("blue", gojoTimers.blue > 0 ? `${Math.ceil(gojoTimers.blue)}s` : "READY", gojoTimers.blue > 0);
+    set("red", gojoTimers.red > 0 ? `${Math.ceil(gojoTimers.red)}s` : "READY", gojoTimers.red > 0);
+    set("purple", gojoPurple ? gojoPurple.state === "merge" ? "MERGE" : "FLY" : gojoTimers.purple > 0 ? `${Math.ceil(gojoTimers.purple)}s` : "READY", gojoTimers.purple > 0, false, !!gojoPurple);
+    set("limitless", gojoInfinityOn ? "ON" : "OFF", false, !gojoInfinityOn);
+    set("domain", gojoTimers.domain > 0 ? `${Math.ceil(gojoTimers.domain)}s` : "READY", gojoTimers.domain > 0);
+  }
+  function updateGojoTechniques(delta) {
+    if (!playerEntity) return;
+    const p = playerEntity.position;
+    gojoTimers.blue = Math.max(0, gojoTimers.blue - delta);
+    gojoTimers.red = Math.max(0, gojoTimers.red - delta);
+    gojoTimers.purple = Math.max(0, gojoTimers.purple - delta);
+    gojoTimers.domain = Math.max(0, gojoTimers.domain - delta);
+    gojoInfinityFx = Math.max(0, gojoInfinityFx - delta);
+    updateGojoPurple(delta);
+    if (gojoBlueOrb) {
+      const orb = gojoBlueOrb;
+      orb.life -= delta;
+      orb.mesh.rotation.y += delta * 5;
+      orb.mesh.scale.setScalar(1 + Math.sin(clock.elapsedTime * 18) * 0.12);
+      for (const e of [...enemyEntities]) {
+        const d = e.position.distanceTo(orb.pos);
+        if (d < 22) {
+          const pull = orb.pos.clone().sub(e.position).setY(0).normalize();
+          e.position.addScaledVector(pull, Math.min(d, 30) * delta * 1.4);
+          applyDamageToEntity(e, 110 * delta, e.position.clone().setY(2.2), "normal", true);
+        }
+      }
+      if (orb.life <= 0) {
+        scene.remove(orb.mesh);
+        disposeObject3D(orb.mesh);
+        gojoBlueOrb = null;
+      }
+    }
+    if (gojoDomain) {
+      const dome = gojoDomain;
+      dome.life -= delta;
+      const elapsed = 3.2 - dome.life;
+      const radius = Math.min(62, 8 + elapsed * 18);
+      dome.mesh.scale.setScalar(radius);
+      dome.mesh.rotation.y += delta * 0.3;
+      dome.rings.forEach((ring, i) => {
+        ring.rotation.x += delta * (0.22 + i * 0.05);
+        ring.rotation.z += delta * (0.16 + i * 0.04);
+      });
+      dome.stars.rotation.y += delta * 0.07;
+      dome.stars.rotation.x += delta * 0.02;
+      dome.arcs.rotation.y -= delta * 0.22;
+      const fade = Math.min(1, elapsed / 0.3) * Math.min(1, Math.max(0, dome.life) / 0.45);
+      dome.starMat.opacity = 0.9 * fade;
+      dome.arcMat.opacity = (0.35 + Math.abs(Math.sin(clock.elapsedTime * 24)) * 0.5) * fade;
+      const pulse = 1 + Math.sin(clock.elapsedTime * 9) * 0.16;
+      dome.core.scale.setScalar(pulse);
+      gojoBloom = Math.max(gojoBloom, 0.9 * fade);
+      for (const e of [...enemyEntities]) {
+        if (e.position.distanceTo(p) < radius) {
+          applyDamageToEntity(e, 420 * delta, e.position.clone().setY(2.2), "normal", true);
+          e.stun = Math.max(e.stun || 0.35, 0.35);
+        }
+      }
+      if (dome.life <= 0) {
+        gojoBloom = Math.max(gojoBloom, 1.4);
+        destroyGojoDomain();
+      }
+    }
+    updateGojoAbilityHUD();
+  }
+  function beamObstacleClip(origin, dir, maxLen) {
+    let best = maxLen;
+    for (const obs of arenaObstacles) {
+      const minX = obs.pos.x - obs.halfSize, maxX = obs.pos.x + obs.halfSize;
+      const minZ = obs.pos.z - obs.halfSize, maxZ = obs.pos.z + obs.halfSize;
+      let tmin = 0, tmax = maxLen;
+      if (Math.abs(dir.x) < 1e-5) {
+        if (origin.x < minX || origin.x > maxX) continue;
+      } else {
+        let t1 = (minX - origin.x) / dir.x, t2 = (maxX - origin.x) / dir.x;
+        if (t1 > t2) {
+          const tmp2 = t1;
+          t1 = t2;
+          t2 = tmp2;
+        }
+        tmin = Math.max(tmin, t1);
+        tmax = Math.min(tmax, t2);
+      }
+      if (Math.abs(dir.z) < 1e-5) {
+        if (origin.z < minZ || origin.z > maxZ) continue;
+      } else {
+        let t1 = (minZ - origin.z) / dir.z, t2 = (maxZ - origin.z) / dir.z;
+        if (t1 > t2) {
+          const tmp2 = t1;
+          t1 = t2;
+          t2 = tmp2;
+        }
+        tmin = Math.max(tmin, t1);
+        tmax = Math.min(tmax, t2);
+      }
+      if (tmin <= tmax && tmin < best) best = Math.max(0, tmin);
+    }
+    return best;
+  }
+  function updateHeliosBeam(delta) {
+    if (!GAME_STATE.inBattle || !playerEntity || isGojo()) {
+      hideHeliosBeam();
+      return;
+    }
+    const profile = getWeaponProfile();
+    if (!mouseDown || profile.kind !== "beam" || playerEntity.overheated) {
+      hideHeliosBeam();
+      return;
+    }
+    const arms = getArmsPart();
+    const heatPerSecond = (arms?.heatRate || 75) * getBeamHeatMult() * arenaHeatGain();
+    playerEntity.heat = Math.min(100, playerEntity.heat + heatPerSecond * delta);
+    if (playerEntity.heat >= 100) {
+      playerEntity.overheated = true;
+      sfx("overheat");
+      showFloatText("\u26A0 HELIOS OVERHEAT \u2014 VENTING", "#ff5533");
+      hideHeliosBeam();
+      return;
+    }
+    const tips = getBarrelTips();
+    let muzzle = tips.length ? tips.reduce((acc, t) => acc.add(t), new Vector3()).multiplyScalar(1 / tips.length) : playerEntity.position.clone().add(new Vector3(0, 3.1, 0));
+    const aim = getAimPoint();
+    if (firstPersonView) {
+      const eye = playerEntity.position.clone().setY(4.95);
+      muzzle = eye.addScaledVector(aim.clone().sub(eye).normalize(), 1.6);
+    }
+    const dir = aim.clone().sub(muzzle).normalize();
+    let length = profile.range;
+    let target = null;
+    for (const enemy of enemyEntities) {
+      const center = enemy.position.clone().setY(2.6 * enemy.scale);
+      const toCenter = center.clone().sub(muzzle);
+      const along = toCenter.dot(dir);
+      if (along <= 0 || along > length) continue;
+      const perp = toCenter.addScaledVector(dir, -along).length();
+      if (perp <= enemy.radius + 1.5) {
+        length = along;
+        target = enemy;
+      }
+    }
+    length = beamObstacleClip(muzzle, dir, length);
+    const beam = buildHeliosBeamMesh();
+    beam.position.copy(muzzle);
+    beam.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), dir);
+    const flicker = 0.92 + Math.random() * 0.16;
+    const beamGlow = beam.getObjectByName("beamGlow");
+    if (beamGlow) beamGlow.visible = !firstPersonView;
+    beam.children.forEach((child) => {
+      const mesh = child;
+      if (!mesh.isMesh) return;
+      if (mesh.name === "beamImpact") {
+        mesh.position.set(0, 0, length);
+        const pulse = 1 + Math.sin(clock.elapsedTime * 32) * 0.18;
+        mesh.scale.set(pulse, pulse, pulse);
+      } else {
+        const width = firstPersonView ? 0.55 : 1;
+        mesh.scale.set(width, width, length * flicker);
+      }
+    });
+    heliosBeamTick -= delta;
+    const tickDamage = (arms?.damage || 900) * profile.damageMult;
+    if (heliosBeamTick <= 0) {
+      heliosBeamTick += profile.interval;
+      if (target) {
+        const wasShielded = target.shield > 0;
+        applyDamageToEntity(target, tickDamage, target.position.clone().setY(2.6 * target.scale), "normal", true);
+        if (Math.random() < 0.35) {
+          spawnDamageNumber(Math.ceil(tickDamage), target.position.clone().setY(3.2 * target.scale), wasShielded ? "shield" : "normal");
+        }
+      } else {
+        spawnExplosionParticles(muzzle.clone().addScaledVector(dir, length), 9369343, 2, 6);
+      }
+    }
+    heliosBeamHitFx -= delta;
+    if (heliosBeamHitFx <= 0) {
+      heliosBeamHitFx = 0.14;
+      sfx("beam");
+      cameraShake = Math.max(cameraShake, 0.06);
+      const impact = muzzle.clone().addScaledVector(dir, length);
+      spawnExplosionParticles(impact, target ? 16773314 : 9369343, 3, 7);
+    }
   }
   function updateCombatLoop(delta) {
     if (!GAME_STATE.inBattle) return;
@@ -27956,14 +29421,25 @@
     if (keys["KeyS"]) move.z += 1;
     if (keys["KeyA"]) move.x -= 1;
     if (keys["KeyD"]) move.x += 1;
-    if (move.length() > 0) {
-      move.normalize();
-      if (playerEntity.dashTime > 0) {
-        playerEntity.position.addScaledVector(playerEntity.dashDir, playerEntity.speed * 4.2 * delta);
-        playerEntity.dashTime -= delta;
-      } else {
-        playerEntity.position.addScaledVector(move, playerEntity.speed * delta);
+    if (firstPersonView) move.applyAxisAngle(new Vector3(0, 1, 0), fpYaw);
+    let onIce = false;
+    for (const ice of arenaIcePatches) {
+      if (Math.hypot(playerEntity.position.x - ice.x, playerEntity.position.z - ice.z) < ice.r) {
+        onIce = true;
+        break;
       }
+    }
+    const desiredVel = move.length() > 0 ? move.normalize().multiplyScalar(playerEntity.speed * (onIce ? 1.15 : 1)) : new Vector3();
+    if (onIce) playerMomentum.lerp(desiredVel, Math.min(1, delta * 3.2));
+    else playerMomentum.copy(desiredVel);
+    if (playerEntity.dashTime > 0) {
+      playerEntity.position.addScaledVector(playerEntity.dashDir, playerEntity.speed * 4.2 * delta);
+      playerEntity.dashTime -= delta;
+      playerMomentum.copy(playerEntity.dashDir).multiplyScalar(playerEntity.speed);
+    } else if (playerMomentum.lengthSq() > 0.01) {
+      playerEntity.position.addScaledVector(playerMomentum, delta);
+    }
+    if (playerMomentum.lengthSq() > 1) {
       playerEntity.walkTimer += delta * 12;
       const leg0 = playerEntity.mesh.getObjectByName("leg_0");
       const leg1 = playerEntity.mesh.getObjectByName("leg_1");
@@ -27971,27 +29447,28 @@
         leg0.rotation.x = Math.sin(playerEntity.walkTimer) * 0.45;
         leg1.rotation.x = -Math.sin(playerEntity.walkTimer) * 0.45;
       }
-    } else if (playerEntity.dashTime > 0) {
-      playerEntity.position.addScaledVector(playerEntity.dashDir, playerEntity.speed * 4.2 * delta);
-      playerEntity.dashTime -= delta;
     }
     resolveObstacleCollisions(playerEntity.position, playerEntity.radius);
     playerEntity.mesh.position.copy(playerEntity.position);
-    const raycaster = new Raycaster();
-    raycaster.setFromCamera(mousePos, camera);
-    const plane = new Plane(new Vector3(0, 1, 0), -2);
-    const targetPoint = new Vector3();
-    if (raycaster.ray.intersectPlane(plane, targetPoint)) {
-      playerEntity.mesh.lookAt(targetPoint.x, playerEntity.mesh.position.y, targetPoint.z);
-    }
+    const targetPoint = getAimPoint();
+    playerEntity.mesh.lookAt(targetPoint.x, playerEntity.mesh.position.y, targetPoint.z);
     if (playerEntity.overheated) {
       if (playerEntity.heat <= 35) {
         playerEntity.overheated = false;
         showFloatText("SYSTEMS COOLED", "#00ff66");
       }
     }
-    const heatMult = GAME_STATE.selectedArena === "volcanic" ? 0.65 : GAME_STATE.selectedArena === "wasteland" ? 1.5 : 1;
-    playerEntity.heat = Math.max(0, playerEntity.heat - playerEntity.heatCoolRate * heatMult * delta);
+    const beamLancing = !isGojo() && getWeaponProfile().kind === "beam" && mouseDown && !playerEntity.overheated;
+    if (!beamLancing) {
+      let ventBonus = 0;
+      for (const vent of arenaCoolVents) {
+        if (Math.hypot(playerEntity.position.x - vent.x, playerEntity.position.z - vent.z) < vent.r) {
+          ventBonus = 30;
+          break;
+        }
+      }
+      playerEntity.heat = Math.max(0, playerEntity.heat - (playerEntity.heatCoolRate * arenaCoolMult() + ventBonus) * delta);
+    }
     playerEntity.energy = Math.min(playerEntity.maxEnergy, playerEntity.energy + 14 * delta);
     playerEntity.dashCooldown = Math.max(0, playerEntity.dashCooldown - delta);
     playerEntity.invuln = Math.max(0, playerEntity.invuln - delta);
@@ -28003,19 +29480,43 @@
       const regen = 60 * (TECH_NODES.find((t) => t.id === "tech_2" && t.unlocked) ? 1.3 : 1);
       playerEntity.shield = Math.min(playerEntity.maxShield, playerEntity.shield + regen * delta);
     }
+    if (isGojo()) updateGojoTechniques(delta);
     if (mouseDown) firePlayerWeapon();
-    camera.position.set(
-      playerEntity.position.x + (Math.random() - 0.5) * cameraShake,
-      12 + (Math.random() - 0.5) * cameraShake,
-      playerEntity.position.z + 20 + (Math.random() - 0.5) * cameraShake
-    );
-    camera.lookAt(playerEntity.position.x, 2.5, playerEntity.position.z);
+    updateHeliosBeam(delta);
+    const shakeX = (Math.random() - 0.5) * cameraShake;
+    const shakeY = (Math.random() - 0.5) * cameraShake;
+    if (firstPersonView) {
+      const bob = Math.sin(playerEntity.walkTimer * 1.7) * 0.035 * Math.min(1, playerMomentum.length() / 8);
+      camera.position.set(
+        playerEntity.position.x + shakeX * 0.12,
+        4.95 + bob + shakeY * 0.12,
+        playerEntity.position.z
+      );
+      camera.rotation.set(
+        fpPitch + shakeY * 4e-3,
+        fpYaw + shakeX * 4e-3,
+        0,
+        "YXZ"
+      );
+    } else {
+      camera.position.set(
+        playerEntity.position.x + shakeX,
+        12 + shakeY,
+        playerEntity.position.z + 20
+      );
+      camera.lookAt(playerEntity.position.x, 2.5, playerEntity.position.z);
+    }
     cameraShake = Math.max(0, cameraShake - delta * 2.2);
     enemyEntities.forEach((enemy) => {
       enemy.hitFlash = Math.max(0, (enemy.hitFlash || 0) - delta * 3);
       if (enemy.hitFlash <= 0.01 && enemy.flashApplied) {
         restoreHitFlash(enemy.mesh);
         enemy.flashApplied = false;
+      }
+      if (enemy.stun && enemy.stun > 0) {
+        enemy.stun = Math.max(0, enemy.stun - delta);
+        enemy.mesh.position.copy(enemy.position);
+        return;
       }
       const dist = enemy.position.distanceTo(playerEntity.position);
       const dirToPlayer = playerEntity.position.clone().sub(enemy.position).normalize();
@@ -28070,17 +29571,21 @@
     updateBossVisuals(delta);
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const p = projectiles[i];
-      const prevPos = p.mesh.position.clone();
+      p.mesh.visible = !(firstPersonView && !p.isPlayer && p.mesh.position.distanceTo(camera.position) < 3.4);
+      if (p.gravity) p.dir.y -= p.gravity * delta;
       p.mesh.position.addScaledVector(p.dir, p.speed * delta);
+      if (p.dir.lengthSq() > 1e-4) p.mesh.lookAt(p.mesh.position.clone().add(p.dir));
       p.life -= delta;
       let hit = false;
+      let splashed = false;
       const px2 = p.mesh.position.x, pz2 = p.mesh.position.z;
-      for (const obs of arenaObstacles) {
-        if (Math.abs(px2 - obs.pos.x) <= obs.halfSize + 0.2 && Math.abs(pz2 - obs.pos.z) <= obs.halfSize + 0.2) {
-          spawnExplosionParticles(p.mesh.position, 16755200, 6, 8);
-          sfx("hit");
-          hit = true;
-          break;
+      if (p.gravity && p.mesh.position.y <= 0.35) hit = true;
+      if (!hit) {
+        for (const obs of arenaObstacles) {
+          if (Math.abs(px2 - obs.pos.x) <= obs.halfSize + 0.2 && Math.abs(pz2 - obs.pos.z) <= obs.halfSize + 0.2) {
+            hit = true;
+            break;
+          }
         }
       }
       if (!hit) {
@@ -28092,25 +29597,46 @@
           }
         }
       }
-      if (!hit) {
-        if (p.isPlayer) {
-          for (const enemy of enemyEntities) {
-            if (p.mesh.position.distanceTo(enemy.position) < enemy.radius + 0.9) {
-              applyDamageToEntity(enemy, p.damage, p.mesh.position.clone(), "normal");
-              hit = true;
-              break;
+      if (!hit && p.isPlayer) {
+        for (const enemy of enemyEntities) {
+          if (p.hitTargets?.has(enemy)) continue;
+          if (p.mesh.position.distanceTo(enemy.position) < enemy.radius + 0.9) {
+            applyDamageToEntity(enemy, p.damage, p.mesh.position.clone(), "normal", true);
+            if (p.splashRadius) {
+              applySplashDamage(p.mesh.position.clone(), p.splashRadius, p.splashDamage || p.damage * 0.5, enemy);
+              splashed = true;
             }
+            if (p.pierceLeft && p.pierceLeft > 0) {
+              p.pierceLeft--;
+              if (!p.hitTargets) p.hitTargets = /* @__PURE__ */ new Set();
+              p.hitTargets.add(enemy);
+            } else {
+              hit = true;
+            }
+            break;
           }
+        }
+      }
+      if (!hit && !p.isPlayer) {
+        if (p.mesh.position.distanceTo(playerEntity.position) < playerEntity.radius + 0.9) {
+          damagePlayer(p.damage, p.mesh.position.clone());
+          hit = true;
+        }
+        if (!hit && wingmanDrone && p.mesh.position.distanceTo(wingmanDrone.position) < 1.6) {
+          damageWingman(p.damage * 0.5);
+          spawnExplosionParticles(p.mesh.position, 61695, 8, 10);
+          hit = true;
+        }
+      }
+      if (hit) {
+        if (p.splashRadius) {
+          if (!splashed) applySplashDamage(p.mesh.position.clone(), p.splashRadius, p.splashDamage || p.damage * 0.5);
+          spawnExplosionParticles(p.mesh.position.clone(), 16753229, 22, 20);
+          sfx("explode");
+          cameraShake = Math.max(cameraShake, 0.35);
         } else {
-          if (p.mesh.position.distanceTo(playerEntity.position) < playerEntity.radius + 0.9) {
-            damagePlayer(p.damage, p.mesh.position.clone());
-            hit = true;
-          }
-          if (!hit && wingmanDrone && p.mesh.position.distanceTo(wingmanDrone.position) < 1.6) {
-            damageWingman(p.damage * 0.5);
-            spawnExplosionParticles(p.mesh.position, 61695, 8, 10);
-            hit = true;
-          }
+          spawnExplosionParticles(p.mesh.position, p.isPlayer ? 16764040 : 16733440, 6, 9);
+          sfx("hit");
         }
       }
       if (hit || p.life <= 0) {
@@ -28165,7 +29691,7 @@
     }
     updateBattleHUD();
   }
-  function applyDamageToEntity(entity, damage, hitPos, kind) {
+  function applyDamageToEntity(entity, damage, hitPos, kind, quiet = false) {
     let remaining = damage;
     const crit = entity.shield <= 0 && Math.random() < 0.12;
     if (crit) remaining *= 1.6;
@@ -28183,7 +29709,23 @@
     entity.hitFlash = 1;
     entity.flashApplied = true;
     applyHitFlash(entity.mesh, 1);
-    sfx("hit");
+    if (!quiet) sfx("hit");
+  }
+  function applySplashDamage(center, radius, damage, exclude) {
+    for (const enemy of enemyEntities) {
+      if (enemy === exclude) continue;
+      if (center.distanceTo(enemy.position) <= radius + enemy.radius) {
+        applyDamageToEntity(enemy, damage, enemy.position.clone().setY(2.4), "normal", true);
+      }
+    }
+    const ring = new Mesh(
+      new RingGeometry(0.6, 1.2, 28),
+      new MeshBasicMaterial({ color: 16753229, transparent: true, opacity: 0.85, side: DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(center.x, 0.25, center.z);
+    scene.add(ring);
+    particles.push({ mesh: ring, ring: true, vel: new Vector3(), life: 0.4, maxLife: 0.4, ringGrow: radius * 2.2 });
   }
   function spawnExplosionParticles(pos, colorHex, count = 16, power = 18) {
     for (let i = 0; i < count; i++) {
@@ -28240,8 +29782,12 @@
     byId("hud-hp-val").innerText = `${Math.ceil(playerEntity.hp)} / ${playerEntity.maxHp}`;
     byId("hud-shield-fill").style.width = `${Math.max(0, shieldPct)}%`;
     byId("hud-shield-val").innerText = `${Math.ceil(playerEntity.shield)} / ${playerEntity.maxShield}`;
+    const beamActive = getWeaponProfile().kind === "beam";
     byId("hud-heat-fill").style.width = `${playerEntity.heat}%`;
-    byId("hud-heat-val").innerText = `${Math.ceil(playerEntity.heat)}%${playerEntity.overheated ? " \u26A0 VENTING" : ""}`;
+    byId("hud-heat-val").innerText = isGojo() ? gojoInfinityOn ? "\u221E INFINITY" : "\u221E RELEASED" : `${Math.ceil(playerEntity.heat)}%${playerEntity.overheated ? " \u26A0 VENTING" : beamActive ? ` \u26A1 HELIOS x${getBeamHeatMult().toFixed(2)}` : ""}`;
+    const energyPct = playerEntity.maxEnergy > 0 ? playerEntity.energy / playerEntity.maxEnergy * 100 : 0;
+    byId("hud-energy-fill").style.width = `${Math.max(0, energyPct)}%`;
+    byId("hud-energy-val").innerText = `${Math.ceil(energyPct)}%`;
     if (enemyEntities.length > 0) {
       const target = enemyEntities[0];
       byId("hud-target-hp-fill").style.width = `${Math.max(0, target.hp / target.maxHp * 100)}%`;
@@ -28250,12 +29796,98 @@
       byId("hud-target-shield-fill").style.width = `${Math.max(0, tShPct)}%`;
       byId("hud-target-shield-val").innerText = `${Math.ceil(tShPct)}%`;
     }
+    if (firstPersonView) updateFPHUD();
+  }
+  function updateFPHUD() {
+    if (!playerEntity) return;
+    const heading = (-fpYaw * 180 / Math.PI % 360 + 360) % 360;
+    byId("fp-heading").innerText = `${Math.round(heading).toString().padStart(3, "0")}\xB0`;
+    byId("fp-dial").style.transform = `rotate(${-heading}deg)`;
+    const setBar = (id, frac) => {
+      const clamped = Math.max(0, Math.min(1, frac));
+      byId(`${id}-fill`).style.width = `${clamped * 100}%`;
+      byId(`${id}-val`).innerText = `${Math.ceil(clamped * 100)}%`;
+    };
+    setBar("fp-hull", playerEntity.hp / playerEntity.maxHp);
+    setBar("fp-shield", playerEntity.maxShield > 0 ? playerEntity.shield / playerEntity.maxShield : 0);
+    setBar("fp-heat", playerEntity.heat / 100);
+    setBar("fp-core", playerEntity.maxEnergy > 0 ? playerEntity.energy / playerEntity.maxEnergy : 0);
+    byId("fp-speed").innerText = `${Math.round(playerMomentum.length() * 2.2)} KPH`;
+    const profile = getWeaponProfile();
+    if (isGojo()) {
+      byId("fp-weapon").innerText = "LIMITLESS";
+      byId("fp-weapon-state").innerText = gojoInfinityOn ? "INFINITY" : "INFINITY OFF";
+    } else {
+      byId("fp-weapon").innerText = profile.label;
+      byId("fp-weapon-state").innerText = playerEntity.overheated ? "THERMAL VENT" : profile.kind === "beam" ? `BEAM x${getBeamHeatMult().toFixed(2)}` : "READY";
+    }
+    const statusEl = byId("fp-status-line");
+    const hpFrac = playerEntity.hp / playerEntity.maxHp;
+    const shFrac = playerEntity.maxShield > 0 ? playerEntity.shield / playerEntity.maxShield : 1;
+    let statusText = "ALL SYSTEMS NOMINAL";
+    let statusWarn = false;
+    if (hpFrac < 0.3) {
+      statusText = "HULL CRITICAL \u2014 EVASIVE ACTION";
+      statusWarn = true;
+    } else if (playerEntity.overheated) {
+      statusText = "THERMAL SATURATION \u2014 VENTING";
+      statusWarn = true;
+    } else if (shFrac < 0.25) {
+      statusText = "SHIELD MATRIX UNSTABLE";
+      statusWarn = true;
+    }
+    statusEl.innerText = statusText;
+    statusEl.classList.toggle("warn", statusWarn);
+    const waveEl = byId("fp-wave");
+    if (GAME_STATE.selectedMode === "survival") {
+      waveEl.style.display = "block";
+      waveEl.innerText = `WAVE ${GAME_STATE.survivalWave.toString().padStart(2, "0")}`;
+    } else {
+      waveEl.style.display = "none";
+    }
+    const box = byId("fp-target");
+    const target = enemyEntities[0];
+    if (target) {
+      const aim = target.position.clone().setY(2.6 * target.scale);
+      const dist = aim.distanceTo(playerEntity.position);
+      const p = aim.project(camera);
+      const onScreen = p.z > -1 && p.z < 1 && Math.abs(p.x) < 0.95 && Math.abs(p.y) < 0.95 && dist < 170;
+      if (onScreen) {
+        const size = MathUtils.clamp(1400 / Math.max(8, dist), 44, 190);
+        box.style.display = "block";
+        box.style.width = `${size}px`;
+        box.style.height = `${size}px`;
+        box.style.left = `${(p.x * 0.5 + 0.5) * 100}%`;
+        box.style.top = `${(-p.y * 0.5 + 0.5) * 100}%`;
+        const labelEl = byId("fp-target-label");
+        labelEl.innerText = `LOCK // ${Math.round(dist)}m`;
+        labelEl.style.left = "50%";
+        labelEl.style.right = "auto";
+        labelEl.style.transform = "translateX(-50%)";
+        if (p.x > 0.55) {
+          labelEl.style.left = "auto";
+          labelEl.style.right = "0";
+          labelEl.style.transform = "none";
+        } else if (p.x < -0.55) {
+          labelEl.style.left = "0";
+          labelEl.style.right = "auto";
+          labelEl.style.transform = "none";
+        }
+      } else {
+        box.style.display = "none";
+      }
+    } else {
+      box.style.display = "none";
+    }
   }
   function endBattle(victory) {
     if (!GAME_STATE.inBattle) return;
     GAME_STATE.inBattle = false;
     stopMusic();
     mouseDown = false;
+    setFirstPerson(false, true);
+    hideHeliosBeam();
+    clearGojoEffects();
     byId("hud-layer").style.display = "none";
     const modal = byId("modal-post-battle");
     const title = byId("result-title-text");
@@ -28311,6 +29943,10 @@
     pickups = [];
     destructibles.forEach((d) => scene.remove(d.mesh));
     destructibles = [];
+    hideHeliosBeam();
+    clearGojoEffects();
+    setFirstPerson(false, true);
+    playerMomentum.set(0, 0, 0);
     pickupPads = [];
     arenaLavaPools = [];
     if (wingmanDrone && wingmanDrone.mesh) scene.remove(wingmanDrone.mesh);
@@ -28362,6 +29998,10 @@
     }
     if (GAME_STATE.inBattle && arenaDust) {
       arenaDust.rotation.y += delta * 0.02;
+      if (arenaDust.userData.snow) {
+        arenaDust.position.y -= delta * 2.4;
+        if (arenaDust.position.y < -12) arenaDust.position.y = 0;
+      }
     }
     for (let i = particles.length - 1; i >= 0; i--) {
       const pt = particles[i];
@@ -28383,6 +30023,7 @@
         const fadeMat = pt.mesh;
         if (fadeMat.material) fadeMat.material.opacity = frac;
       }
+      pt.mesh.visible = !(firstPersonView && pt.mesh.position.distanceTo(camera.position) < 5.5);
       pt.life -= delta;
       if (pt.life <= 0) {
         scene.remove(pt.mesh);
@@ -28392,6 +30033,11 @@
     if (GAME_STATE.inBattle) {
       updateCombatLoop(delta);
     }
+    if (bloomPass) {
+      const bloomTarget = 0.55 + gojoBloom;
+      bloomPass.strength += (bloomTarget - bloomPass.strength) * Math.min(1, delta * 10);
+    }
+    gojoBloom = Math.max(0, gojoBloom - delta * 1.8);
     if (composer) {
       composer.render();
     } else {
@@ -28401,6 +30047,7 @@
   window.onload = () => {
     const hadSave = loadGame();
     initGraphicsEngine();
+    applyPilotNameUI();
     selectPartCategory("head");
     setupColorPickers();
     renderTechTree();
@@ -28411,14 +30058,14 @@
     if (hadSave) showFloatText("PILOT PROFILE RESTORED", "#00f0ff");
     window.addEventListener("pointerdown", audioUnlock, { once: true });
     window.addEventListener("keydown", audioUnlock, { once: true });
-  };
-  window.onload = () => {
-    initGraphicsEngine();
-    selectPartCategory("head");
-    setupColorPickers();
-    renderTechTree();
-    refreshStatsUI();
-    updateCurrencyUI();
+    const pilotInput = byId("pilot-name");
+    pilotInput.addEventListener("change", applyPilotName);
+    pilotInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        pilotInput.blur();
+      }
+    });
   };
   Object.assign(globalThis, {
     switchTab,

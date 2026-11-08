@@ -272,6 +272,22 @@
             100% { background-position: 260px 0; }
         }
 
+        .pilot-id {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            margin: 0 0 9px 0; padding: 4px 7px;
+            border: 1px solid rgba(0,240,255,0.12); background: rgba(0,240,255,0.03);
+        }
+        .pilot-id label {
+            font-size: 9px; font-weight: 800; letter-spacing: 1.7px;
+            color: var(--text-dim); text-transform: uppercase;
+        }
+        .pilot-id input {
+            width: 112px; padding: 3px 6px; outline: none;
+            background: rgba(0,0,0,0.35); border: 1px solid rgba(0,240,255,0.2);
+            color: var(--accent-cyan); font-family: var(--font-family);
+            font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+        }
+        .pilot-id input:focus { border-color: var(--accent-cyan); box-shadow: 0 0 8px rgba(0,240,255,0.25); }
         .category-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 5px; border-bottom: 1px solid var(--border-panel); scrollbar-width: none; }
         .category-tabs::-webkit-scrollbar, .parts-grid::-webkit-scrollbar { display: none; }
         .parts-grid::-webkit-scrollbar-thumb { background: rgba(255,85,0,0.4); }
@@ -407,6 +423,74 @@
             border-color: #fff;
         }
 
+        #gojo-abilities {
+            display: none;
+            position: absolute; left: 50%; bottom: 122px;
+            transform: translateX(-50%);
+            gap: 4px; z-index: 32;
+            justify-content: center; flex-wrap: wrap;
+            max-width: calc(100% - 32px);
+            pointer-events: none;
+        }
+        body.gojo-view #gojo-abilities { display: flex; }
+        body.fp-view #gojo-abilities { bottom: 205px; }
+        .gojo-ab {
+            display: grid; grid-template-columns: 13px 1fr; grid-template-rows: auto auto;
+            column-gap: 4px; align-items: center;
+            min-width: 50px; padding: 4px 5px;
+            background: rgba(5,10,18,0.84);
+            border: 1px solid rgba(0,240,255,0.14);
+            border-left: 2px solid var(--accent-cyan);
+            border-radius: 3px;
+            backdrop-filter: blur(6px);
+        }
+        .gojo-ab b {
+            grid-row: 1 / span 2; align-self: center;
+            width: 13px; height: 13px; display: flex; align-items: center; justify-content: center;
+            background: var(--accent-cyan); color: #05070a;
+            font-size: 9px; font-weight: 900; border-radius: 2px;
+        }
+        .gojo-ab span {
+            font-size: 7px; font-weight: 900; letter-spacing: 0.6px;
+            color: #d7f6ff; text-transform: uppercase; white-space: nowrap;
+        }
+        .gojo-ab i {
+            font-style: normal; font-size: 6.5px; font-weight: 800;
+            letter-spacing: 0.8px; color: #00ff9d; text-transform: uppercase;
+        }
+        .gojo-ab.cooling { opacity: 0.55; }
+        .gojo-ab.cooling i { color: #ffb700; }
+        .gojo-ab.off i { color: #ff5533; }
+        .gojo-ab.firing { border-color: #a855f7; box-shadow: 0 0 10px rgba(168,85,247,0.5); }
+        #gab-blue { border-left-color: #2e7bff; }
+        #gab-red { border-left-color: #ff2f45; }
+        #gab-purple { border-left-color: #a855f7; }
+        #gab-limitless { border-left-color: #9fe8ff; }
+        #gab-domain { border-left-color: #6d3bff; }
+
+        #domain-overlay {
+            position: absolute; inset: 0; z-index: 0;
+            pointer-events: none; opacity: 0;
+            transition: opacity 0.28s ease;
+            background:
+                radial-gradient(circle at 50% 46%, rgba(168,85,247,0.04) 0%, rgba(88,28,135,0.24) 34%, rgba(12,0,28,0.78) 74%, rgba(0,0,0,0.96) 100%),
+                repeating-linear-gradient(0deg, rgba(216,180,254,0.055) 0 1px, transparent 1px 5px);
+        }
+        #domain-overlay::after {
+            content: ''; position: absolute; inset: -25%;
+            background: radial-gradient(circle at 50% 50%, rgba(216,180,254,0.16), transparent 55%);
+        }
+        #domain-overlay.active { opacity: 1; animation: domainPulse 1.2s ease-in-out infinite alternate; }
+        #domain-overlay.active::after { animation: domainBreathe 2.4s ease-in-out infinite; }
+        @keyframes domainPulse {
+            from { filter: brightness(0.9) saturate(1.05); }
+            to { filter: brightness(1.2) saturate(1.45); }
+        }
+        @keyframes domainBreathe {
+            0%, 100% { transform: scale(0.92); opacity: 0.35; }
+            50% { transform: scale(1.08); opacity: 0.8; }
+        }
+
         #hud-layer {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -415,6 +499,7 @@
             flex-direction: column;
             justify-content: space-between;
             padding: 24px;
+            z-index: 1;
         }
 
         .hud-card {
@@ -611,6 +696,254 @@
             font-family: inherit;
         }
         select:focus, input[type="range"]:focus { border-color: var(--accent-orange); }
+
+        /* ===================== FIRST-PERSON / SPARK COCKPIT HUD ===================== */
+        body.fp-view #fp-hud { display: block; }
+        body.fp-view .hud-card { opacity: 0 !important; pointer-events: none; }
+        body.fp-view .reticle-container { display: none; }
+        body.fp-view .hud-bottom { display: none !important; }
+        body.fp-view #wave-indicator { display: none !important; }
+        body.fp-view header { opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
+        body.fp-view canvas, body.fp-view #canvas-container { cursor: none; }
+
+        #fp-hud {
+            position: absolute;
+            inset: 0;
+            display: none;
+            pointer-events: none;
+            z-index: 8;
+            color: #a9f7ff;
+            letter-spacing: 1px;
+            text-shadow: 0 0 9px rgba(0, 240, 255, 0.5);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .fp-scan {
+            position: absolute; inset: 0;
+            background: repeating-linear-gradient(to bottom, rgba(0, 240, 255, 0.05) 0 1px, transparent 1px 4px);
+            opacity: 0.4;
+            animation: fpScan 7s linear infinite;
+        }
+        @keyframes fpScan { from { background-position: 0 0; } to { background-position: 0 8px; } }
+
+        .fp-vignette {
+            position: absolute; inset: 0;
+            background:
+                radial-gradient(ellipse at center, transparent 48%, rgba(0, 16, 24, 0.55) 100%),
+                linear-gradient(180deg, rgba(0, 240, 255, 0.07), transparent 16%, transparent 84%, rgba(0, 240, 255, 0.05));
+        }
+
+        /* --- compass --- */
+        .fp-compass {
+            position: absolute; top: 18px; left: 50%;
+            width: 132px; height: 132px;
+            transform: translateX(-50%);
+            opacity: 0.9;
+        }
+        .fp-compass::before {
+            content: '';
+            position: absolute; left: 50%; top: -7px;
+            margin-left: -5px;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 8px solid var(--accent-yellow);
+            filter: drop-shadow(0 0 6px rgba(255, 183, 0, 0.8));
+        }
+        .fp-dial {
+            position: absolute; inset: 4px;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 240, 255, 0.22);
+            background: repeating-conic-gradient(from 0deg, rgba(0, 240, 255, 0.65) 0deg 0.8deg, transparent 0.8deg 10deg);
+            -webkit-mask: radial-gradient(circle at center, transparent 60%, #000 61%);
+            mask: radial-gradient(circle at center, transparent 60%, #000 61%);
+            will-change: transform;
+        }
+        .fp-heading {
+            position: absolute; left: 50%; top: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 22px; font-weight: 900;
+            color: #e9ffff;
+            letter-spacing: 2px;
+        }
+
+        /* --- reticle --- */
+        .fp-reticle {
+            position: absolute; left: 50%; top: 50%;
+            width: 190px; height: 190px;
+            transform: translate(-50%, -50%);
+        }
+        .fp-orbit {
+            position: absolute; inset: 16px;
+            border-radius: 50%;
+            border: 1px dashed rgba(0, 240, 255, 0.3);
+            animation: fpSpin 16s linear infinite;
+        }
+        .fp-orbit::before {
+            content: '';
+            position: absolute; top: -3px; left: 50%;
+            width: 6px; height: 6px; margin-left: -3px;
+            border-radius: 50%;
+            background: var(--accent-yellow);
+            box-shadow: 0 0 10px var(--accent-yellow);
+        }
+        @keyframes fpSpin { to { transform: rotate(360deg); } }
+        .fp-ring {
+            position: absolute; left: 50%; top: 50%;
+            width: 76px; height: 76px; margin: -38px 0 0 -38px;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 240, 255, 0.55);
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.16), inset 0 0 18px rgba(0, 240, 255, 0.12);
+        }
+        .fp-tick { position: absolute; left: 50%; top: 50%; background: rgba(0, 240, 255, 0.85); }
+        .fp-tick.t { width: 1px; height: 10px; margin: -48px 0 0 -0.5px; }
+        .fp-tick.b { width: 1px; height: 10px; margin: 38px 0 0 -0.5px; }
+        .fp-tick.l { width: 10px; height: 1px; margin: -0.5px 0 0 -48px; }
+        .fp-tick.r { width: 10px; height: 1px; margin: -0.5px 0 0 38px; }
+        .fp-cross-h {
+            position: absolute; left: 50%; top: 50%;
+            width: 108px; height: 1px; margin: -0.5px 0 0 -54px;
+            background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.75), transparent);
+        }
+        .fp-cross-v {
+            position: absolute; left: 50%; top: 50%;
+            width: 1px; height: 108px; margin: -54px 0 0 -0.5px;
+            background: linear-gradient(180deg, transparent, rgba(0, 240, 255, 0.75), transparent);
+        }
+        .fp-dot {
+            position: absolute; left: 50%; top: 50%;
+            width: 4px; height: 4px; margin: -2px 0 0 -2px;
+            border-radius: 50%;
+            background: var(--accent-yellow);
+            box-shadow: 0 0 12px var(--accent-yellow);
+        }
+
+        /* --- projected target lock --- */
+        #fp-target {
+            position: absolute;
+            display: none;
+            width: 90px; height: 90px;
+            transform: translate(-50%, -50%);
+            border: 1px solid rgba(255, 183, 0, 0.14);
+            box-shadow: inset 0 0 20px rgba(255, 183, 0, 0.05);
+        }
+        .fp-corner { position: absolute; width: 14px; height: 14px; border: 2px solid rgba(255, 183, 0, 0.9); }
+        .fp-corner.tl { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+        .fp-corner.tr { top: -1px; right: -1px; border-left: 0; border-bottom: 0; }
+        .fp-corner.bl { bottom: -1px; left: -1px; border-right: 0; border-top: 0; }
+        .fp-corner.br { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+        .fp-target-label {
+            position: absolute; top: -20px; left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px; font-weight: 900;
+            letter-spacing: 1.4px;
+            color: var(--accent-yellow);
+            white-space: nowrap;
+            text-shadow: 0 0 10px rgba(255, 183, 0, 0.7);
+        }
+
+        /* --- telemetry --- */
+        .fp-telemetry {
+            position: absolute; left: 16px; bottom: 14px;
+            width: 196px;
+            padding: 11px 12px 10px;
+            background: linear-gradient(155deg, rgba(2, 18, 26, 0.8), rgba(2, 9, 14, 0.62));
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            border-left: 2px solid rgba(0, 240, 255, 0.7);
+            clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
+            backdrop-filter: blur(6px);
+        }
+        .fp-title {
+            display: flex; justify-content: space-between; align-items: baseline;
+            font-size: 9.5px; font-weight: 900;
+            letter-spacing: 1.6px; color: #e9ffff;
+            margin-bottom: 7px; white-space: nowrap;
+        }
+        .fp-title span { color: rgba(0, 240, 255, 0.5); font-size: 6.5px; letter-spacing: 1px; }
+        .fp-row {
+            display: flex; align-items: center; gap: 6px;
+            margin-top: 5px;
+            font-size: 8.5px; font-weight: 800;
+            color: rgba(180, 240, 255, 0.75);
+            letter-spacing: 1px;
+        }
+        .fp-row > span { width: 37px; }
+        .fp-row i {
+            flex: 1; height: 4px;
+            background: rgba(0, 240, 255, 0.1);
+            border: 1px solid rgba(0, 240, 255, 0.12);
+            overflow: hidden;
+        }
+        .fp-row i b {
+            display: block; height: 100%; width: 100%;
+            background: linear-gradient(90deg, #00a9c8, #7df9ff);
+            box-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+            transition: width 0.12s linear;
+        }
+        .fp-row.heat i b { background: linear-gradient(90deg, #ffb700, #ff4400); box-shadow: 0 0 8px rgba(255, 90, 0, 0.6); }
+        .fp-row em { width: 32px; text-align: right; font-style: normal; color: #dcfeff; font-size: 8.5px; }
+
+        /* --- systems --- */
+        .fp-systems {
+            position: absolute; right: 16px; bottom: 14px;
+            width: 168px;
+            padding: 10px 12px;
+            text-align: right;
+            background: linear-gradient(200deg, rgba(2, 16, 24, 0.66), rgba(2, 9, 14, 0.82));
+            border: 1px solid rgba(0, 240, 255, 0.16);
+            border-right: 2px solid rgba(255, 183, 0, 0.7);
+            clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%, 0 12px);
+            backdrop-filter: blur(6px);
+        }
+        .fp-weapon {
+            font-size: 12px; font-weight: 900;
+            letter-spacing: 1.4px;
+            color: var(--accent-yellow);
+            text-shadow: 0 0 12px rgba(255, 183, 0, 0.55);
+        }
+        .fp-weapon-state { font-size: 9px; font-weight: 800; color: #a9f7ff; margin-top: 2px; letter-spacing: 1.4px; }
+        .fp-wave { display: none; font-size: 9px; font-weight: 900; color: #fff; margin-top: 4px; letter-spacing: 1.6px; }
+        .fp-status-line {
+            font-size: 8px; font-weight: 800;
+            letter-spacing: 1.1px;
+            color: rgba(0, 240, 255, 0.55);
+            margin-top: 8px;
+        }
+        .fp-status-line.warn { color: #ff6b4a; text-shadow: 0 0 10px rgba(255, 80, 50, 0.7); animation: fpBlink 1s steps(2) infinite; }
+        @keyframes fpBlink { 50% { opacity: 0.35; } }
+        .fp-exit { font-size: 7px; color: rgba(160, 230, 255, 0.4); margin-top: 9px; letter-spacing: 1px; white-space: nowrap; }
+
+        .fp-boot {
+            position: absolute; left: 50%; top: 61%;
+            transform: translateX(-50%);
+            width: 86%;
+            font-size: 8.5px; font-weight: 900;
+            line-height: 1.7;
+            letter-spacing: 1.5px;
+            text-align: center;
+            color: #c9fcff;
+            white-space: normal;
+            opacity: 0;
+        }
+        .fp-boot.show { animation: fpBoot 2.8s ease-out forwards; }
+        @keyframes fpBoot {
+            0% { opacity: 0; letter-spacing: 7px; }
+            12% { opacity: 1; }
+            72% { opacity: 1; }
+            100% { opacity: 0; letter-spacing: 2.4px; }
+        }
+
+        @media (max-width: 760px) {
+            .fp-compass { width: 108px; height: 108px; top: 12px; }
+            .fp-heading { font-size: 17px; }
+            .fp-reticle { width: 160px; height: 160px; }
+            .fp-telemetry { width: 166px; left: 10px; bottom: 10px; padding: 9px 9px 8px; }
+            .fp-systems { width: 142px; right: 10px; bottom: 10px; padding: 8px 9px; }
+            .fp-weapon { font-size: 10.5px; }
+            .fp-title { font-size: 9px; }
+            .fp-row { font-size: 7.5px; gap: 4px; }
+            .fp-row > span { width: 31px; }
+            .fp-row em { width: 27px; font-size: 7.5px; }
+        }
 </style>
 </head>
 <body>
@@ -640,6 +973,11 @@
             <div class="panel-header">
                 Mech Architecture
                 <span style="font-size: 11px; color: var(--accent-orange);" id="mech-class-name">CUSTOM CHASSIS</span>
+            </div>
+
+            <div class="pilot-id">
+                <label for="pilot-name">Pilot Callsign</label>
+                <input id="pilot-name" type="text" maxlength="18" value="PILOT" autocomplete="off" spellcheck="false">
             </div>
 
             <div class="stat-list">
@@ -746,15 +1084,15 @@
                 <div class="parts-grid" style="max-height: 200px;">
                     <div class="part-card equipped" id="arena-foundry" onclick="setArena('foundry')">
                         <div class="part-name">Industrial Foundry</div>
-                        <div class="part-desc">Standard steel grid with heavy cover pillars and molten hazards.</div>
+                        <div class="part-desc">Symmetrical cargo grid and gantry frames. Coolant vent pads chill your reactor while you hold them.</div>
                     </div>
                     <div class="part-card" id="arena-volcanic" onclick="setArena('volcanic')">
                         <div class="part-name">Volcanic Refinery</div>
-                        <div class="part-desc">Extreme ambient temperature. +35% weapon heat build-up.</div>
+                        <div class="part-desc">Central caldera with lava pools. +35% weapon heat build-up and sluggish cooling.</div>
                     </div>
-                    <div class="part-card" id="arena-wasteland" onclick="setArena('wasteland')">
-                        <div class="part-name">Frozen Wasteland</div>
-                        <div class="part-desc">Sub-zero tundra. Rapid weapon cooling, reduced traction.</div>
+                    <div class="part-card" id="arena-arctic" onclick="setArena('arctic')">
+                        <div class="part-name">Arctic Expanse</div>
+                        <div class="part-desc">Glacier plates and black ice. Weapon heat -20%, rapid cooling, almost no traction on ice.</div>
                     </div>
                 </div>
             </div>
@@ -781,12 +1119,13 @@
         </div>
 
         <!-- BATTLE HUD OVERLAY -->
+        <div id="domain-overlay"></div>
         <div id="hud-layer" style="display: none;">
             <div id="wave-indicator">SURVIVAL WAVE 1</div>
             <div style="display: flex; justify-content: space-between; width: 100%;">
                 <div class="hud-card">
                     <div style="font-weight: 900; font-size: 13px; color: var(--accent-orange); margin-bottom: 8px;">
-                        PILOT - IRON MAW MECH
+                        <span id="hud-pilot-name">PILOT</span> - IRON MAW MECH
                     </div>
                     <div class="hud-meter">
                         <div class="hud-meter-header"><span>HULL INTEGRITY</span><span id="hud-hp-val">2800 / 2800</span></div>
@@ -826,11 +1165,69 @@
                 <div class="reticle-dot"></div>
             </div>
 
-            <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%;">
-                <div style="background: rgba(0,0,0,0.7); padding: 12px 18px; border-radius: 4px; border: 1px solid var(--border-panel); font-size: 12px; font-weight: 700;">
-                    [WASD] Move &amp; Strafe | [MOUSE] Aim | [HOLD LMB] Fire | [SPACE] Boost Dash | [SHIFT] Drone Hold
+            <!-- FIRST-PERSON / SPARK COCKPIT OVERLAY -->
+            <div id="fp-hud">
+                <div class="fp-scan"></div>
+                <div class="fp-vignette"></div>
+
+                <div class="fp-compass">
+                    <div class="fp-dial" id="fp-dial"></div>
+                    <div class="fp-heading" id="fp-heading">000&#176;</div>
+                </div>
+
+                <div class="fp-reticle">
+                    <div class="fp-orbit"></div>
+                    <div class="fp-ring"></div>
+                    <span class="fp-tick t"></span>
+                    <span class="fp-tick b"></span>
+                    <span class="fp-tick l"></span>
+                    <span class="fp-tick r"></span>
+                    <div class="fp-cross-h"></div>
+                    <div class="fp-cross-v"></div>
+                    <div class="fp-dot"></div>
+                </div>
+
+                <div id="fp-target">
+                    <span class="fp-corner tl"></span>
+                    <span class="fp-corner tr"></span>
+                    <span class="fp-corner bl"></span>
+                    <span class="fp-corner br"></span>
+                    <div class="fp-target-label" id="fp-target-label">LOCK // 000m</div>
+                </div>
+
+                <div class="fp-telemetry">
+                    <div class="fp-title">SPARK <span>TACTICAL LINK</span></div>
+                    <div class="fp-row"><span>HULL</span><i><b id="fp-hull-fill"></b></i><em id="fp-hull-val">100%</em></div>
+                    <div class="fp-row"><span>SHIELD</span><i><b id="fp-shield-fill"></b></i><em id="fp-shield-val">100%</em></div>
+                    <div class="fp-row heat"><span>HEAT</span><i><b id="fp-heat-fill"></b></i><em id="fp-heat-val">0%</em></div>
+                    <div class="fp-row"><span>CORE</span><i><b id="fp-core-fill"></b></i><em id="fp-core-val">100%</em></div>
+                    <div class="fp-row"><span>SPEED</span><i style="background: transparent; border-color: transparent;"></i><em id="fp-speed">0 KPH</em></div>
+                </div>
+
+                <div class="fp-systems">
+                    <div class="fp-weapon" id="fp-weapon">HELIOS BEAM</div>
+                    <div class="fp-weapon-state" id="fp-weapon-state">READY</div>
+                    <div class="fp-wave" id="fp-wave">WAVE 01</div>
+                    <div class="fp-status-line" id="fp-status-line">ALL SYSTEMS NOMINAL</div>
+                    <div class="fp-exit">[ \ ] / [ESC] EXIT COCKPIT</div>
+                </div>
+
+                <div class="fp-boot" id="fp-boot">COMMS ESTABLISHED: SPARK-10 INFORMATION STREAM ACTIVE</div>
+            </div>
+
+            <div class="hud-bottom" style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%;">
+                <div class="hud-legend" style="background: rgba(0,0,0,0.7); padding: 12px 18px; border-radius: 4px; border: 1px solid var(--border-panel); font-size: 12px; font-weight: 700;">
+                    [WASD] Move &amp; Strafe | [MOUSE] Aim | [HOLD LMB] Fire | [SPACE] Boost Dash | [SHIFT] Drone Hold | [ \ ] First / Third Person
                 </div>
                 <button class="btn btn-secondary interactive" onclick="abortMission()">ABORT MISSION</button>
+            </div>
+
+            <div id="gojo-abilities">
+                <div class="gojo-ab" id="gab-blue"><b>1</b><span>Blue</span><i id="gab-blue-state">READY</i></div>
+                <div class="gojo-ab" id="gab-red"><b>2</b><span>Red</span><i id="gab-red-state">READY</i></div>
+                <div class="gojo-ab" id="gab-purple"><b>3</b><span>Purple</span><i id="gab-purple-state">READY</i></div>
+                <div class="gojo-ab" id="gab-limitless"><b>4</b><span>Infinity</span><i id="gab-limitless-state">ON</i></div>
+                <div class="gojo-ab" id="gab-domain"><b>5</b><span>Domain</span><i id="gab-domain-state">READY</i></div>
             </div>
         </div>
 
