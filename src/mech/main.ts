@@ -89,6 +89,7 @@ interface CursedOrbState {
     dir: THREE.Vector3;
     life: number;
     maxLife: number;
+    max: boolean;
 }
 let gojoBlueOrb: CursedOrbState | null = null;
 let gojoRedOrb: CursedOrbState | null = null;
@@ -107,6 +108,7 @@ let gojoDomain: {
     prevBg: THREE.Color | null;
     prevFog: THREE.FogBase | null;
     prevDustVisible: boolean;
+    max: boolean;
 } | null = null;
 interface HollowPurpleState {
     group: THREE.Group;
@@ -127,8 +129,21 @@ interface HollowPurpleState {
     state: 'merge' | 'fly';
     timer: number;
     life: number;
+    max: boolean;
 }
 let gojoPurple: HollowPurpleState | null = null;
+interface ComboPurpleState {
+    group: THREE.Group;
+    core: THREE.Mesh;
+    shell: THREE.Mesh;
+    ringA: THREE.Mesh;
+    ringB: THREE.Mesh;
+    pos: THREE.Vector3;
+    timer: number;
+}
+let gojoComboPurple: ComboPurpleState | null = null;
+let gojoMaxOutput = false;
+let purpleAudio: HTMLAudioElement | null = null;
 let gojoTimers = { blue: 0, red: 0, purple: 0, domain: 0 };
 let gojoInfinityOn = true;
 let gojoInfinityFx = 0;
@@ -1093,7 +1108,7 @@ let heliosBeamHitFx = 0;
         const GOJO_TECHNIQUES = [
             { id: 'tech_blue', name: 'Cursed Technique: Blue', desc: 'Key 1 — a blue gravity orb that drags hostiles into a collapsing point.', color: 0x2e7bff },
             { id: 'tech_red', name: 'Cursed Technique: Red', desc: 'Key 2 — launch a red orb; its impact detonates a repulsion shockwave.', color: 0xff2f45 },
-            { id: 'tech_purple', name: 'Hollow Technique: Purple', desc: 'Key 3 or LMB — merge Blue and Red into a Hollow Purple annihilation orb.', color: 0xa855f7 },
+            { id: 'tech_purple', name: 'Imaginary Technique: Hollow Purple', desc: 'Key 3 or LMB — an annihilation orb. Under Maximum Output, a held Blue detonates with a fired Red.', color: 0xa855f7 },
             { id: 'tech_limitless', name: 'Limitless: Infinity', desc: 'Key 4 — toggle Infinity. Incoming force stalls; damage is almost nullified.', color: 0x9fe8ff },
             { id: 'tech_domain', name: 'Domain Expansion: Unlimited Void', desc: 'Key 5 — a solid void barrier with a black hole and galaxy; traps hostiles in space.', color: 0x6d3bff }
         ];
@@ -2497,7 +2512,7 @@ let fxaaPass: ShaderPass | null = null;
 
         function setupInputControls() {
             window.addEventListener('keydown', e => {
-                if (GAME_STATE.inBattle && ['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','Backslash','Digit1','Digit2','Digit3','Digit4','Digit5','Numpad1','Numpad2','Numpad3','Numpad4','Numpad5'].includes(e.code)) e.preventDefault();
+                if (GAME_STATE.inBattle && ['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','Backslash','Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Numpad1','Numpad2','Numpad3','Numpad4','Numpad5','Numpad6'].includes(e.code)) e.preventDefault();
                 keys[e.code] = true;
                 if (GAME_STATE.inBattle && e.code === 'Space' && !e.repeat) tryBoostDash();
                 if (GAME_STATE.inBattle && e.code === 'ShiftLeft' && !e.repeat) toggleWingmanHold();
@@ -2508,6 +2523,7 @@ let fxaaPass: ShaderPass | null = null;
                     else if (e.code === 'Digit3' || e.code === 'Numpad3') castHollowPurple();
                     else if (e.code === 'Digit4' || e.code === 'Numpad4') toggleGojoInfinity();
                     else if (e.code === 'Digit5' || e.code === 'Numpad5') castGojoDomain();
+                    else if (e.code === 'Digit6' || e.code === 'Numpad6') toggleGojoMaxOutput();
                 }
             });
             window.addEventListener('keyup', e => keys[e.code] = false);
@@ -3206,6 +3222,10 @@ let fxaaPass: ShaderPass | null = null;
         function clearGojoEffects() {
             if (gojoBlueOrb) { scene.remove(gojoBlueOrb.group); gojoBlueOrb = null; }
             if (gojoRedOrb) { scene.remove(gojoRedOrb.group); gojoRedOrb = null; }
+            if (gojoComboPurple) { scene.remove(gojoComboPurple.group); gojoComboPurple = null; }
+            gojoMaxOutput = false;
+            document.body.classList.remove('max-output');
+            if (purpleAudio) purpleAudio.pause();
             if (gojoPurple) {
                 scene.remove(gojoPurple.group);
                 scene.remove(gojoPurple.trail);
@@ -3463,11 +3483,12 @@ let fxaaPass: ShaderPass | null = null;
             if (!playerEntity) return;
             if (gojoTimers.purple > 0) {
                 sfx('deny');
-                showFloatText(`HOLLOW PURPLE RECHARGING — ${Math.ceil(gojoTimers.purple)}s`, '#d8b4fe');
+                showFloatText(`IMAGINARY TECHNIQUE: HOLLOW PURPLE — RECHARGING ${Math.ceil(gojoTimers.purple)}s`, '#d8b4fe');
                 return;
             }
-            if (gojoPurple) return;
-            gojoTimers.purple = 4.5;
+            if (gojoPurple || gojoComboPurple) return;
+            const max = gojoMaxOutput;
+            gojoTimers.purple = gojoCooldown(4.5);
 
             const assets = getHollowPurpleAssets();
             const eye = playerEntity.position.clone().setY(4.95);
@@ -3476,9 +3497,10 @@ let fxaaPass: ShaderPass | null = null;
             dir.normalize();
             const muzzle = eye.clone().addScaledVector(dir, firstPersonView ? 5.5 : 4.2);
 
+            const outputScale = max ? 3 : 1;
             const group = new THREE.Group();
             group.position.copy(muzzle);
-            group.scale.setScalar(0.62);
+            group.scale.setScalar(0.62 * outputScale);
             const core = new THREE.Mesh(assets.coreGeo, assets.coreMat);
             const shell = new THREE.Mesh(assets.shellGeo, assets.shellMat);
             const ringA = new THREE.Mesh(assets.ringGeoA, assets.ringMatA);
@@ -3523,9 +3545,11 @@ let fxaaPass: ShaderPass | null = null;
                 trailAges: assets.trailAges,
                 trailHead: 0,
                 pos: muzzle.clone(), dir,
-                state: 'merge', timer: 0.38, life: 0
+                state: 'merge', timer: 0.38, life: 0, max
             };
-            showFloatText('BLUE + RED — HOLLOW PURPLE', '#d8b4fe');
+            assets.trailMat.size = max ? 1.8 : 0.78;
+            showFloatText(max ? 'IMAGINARY TECHNIQUE: HOLLOW PURPLE — MAXIMUM OUTPUT' : 'IMAGINARY TECHNIQUE: HOLLOW PURPLE', '#d8b4fe');
+            if (max) playPurpleTheme();
             cameraShake = Math.max(cameraShake, 0.18);
             gojoBloom = Math.max(gojoBloom, 0.2);
             sfx('beam');
@@ -3538,12 +3562,15 @@ let fxaaPass: ShaderPass | null = null;
             scene.remove(shot.group);
             scene.remove(shot.trail);
             shot.trail.visible = false;
+            const blastRadius = shot.max ? 54 : 20;
+            const blastScale = shot.max ? 3 : 1;
+            getHollowPurpleAssets().trailMat.size = 0.78;
             gojoPurple = null;
 
             for (const e of [...enemyEntities]) {
                 const d = e.position.distanceTo(pos);
-                if (d >= 18) continue;
-                const dmg = 7200 * (1 - (d / 18) * 0.5);
+                if (d >= blastRadius) continue;
+                const dmg = 7200 * (shot.max ? 3 : 1) * (1 - (d / blastRadius) * 0.5);
                 applyDamageToEntity(e, dmg, e.position.clone().setY(2.4), 'normal', true);
                 spawnDamageNumber(Math.ceil(dmg), e.position.clone().setY(3.7), 'normal');
                 e.stun = Math.max(e.stun || 0, 0.6);
@@ -3560,8 +3587,9 @@ let fxaaPass: ShaderPass | null = null;
             );
             if (!nearCockpit) {
                 shock.position.copy(pos);
+                shock.scale.setScalar(blastScale);
                 scene.add(shock);
-                particles.push({ mesh: shock, vel: new THREE.Vector3(), life: 0.42, maxLife: 0.42, scaleRate: 38, fade: true });
+                particles.push({ mesh: shock, vel: new THREE.Vector3(), life: 0.42, maxLife: 0.42, scaleRate: 38 * blastScale, fade: true });
 
                 const flash = new THREE.Mesh(
                     assets.impactGeo,
@@ -3571,19 +3599,20 @@ let fxaaPass: ShaderPass | null = null;
                     })
                 );
                 flash.position.copy(pos);
+                flash.scale.setScalar(blastScale);
                 scene.add(flash);
-                particles.push({ mesh: flash, vel: new THREE.Vector3(), life: 0.22, maxLife: 0.22, scaleRate: 12, fade: true });
+                particles.push({ mesh: flash, vel: new THREE.Vector3(), life: 0.22, maxLife: 0.22, scaleRate: 12 * blastScale, fade: true });
 
-                spawnHollowPurpleRing(pos, 0xd8b4fe, 26, 0.5);
-                spawnHollowPurpleRing(pos, 0x7c3aed, 18, 0.42, true);
-                spawnExplosionParticles(pos, 0x8b5cf6, 14, 28);
-                spawnExplosionParticles(pos, 0x5b21b6, 6, 20);
+                spawnHollowPurpleRing(pos, 0xd8b4fe, 26 * blastScale, 0.5);
+                spawnHollowPurpleRing(pos, 0x7c3aed, 18 * blastScale, 0.42, true);
+                spawnExplosionParticles(pos, 0x8b5cf6, 14 * blastScale, 28 * blastScale);
+                spawnExplosionParticles(pos, 0x5b21b6, 6 * blastScale, 20 * blastScale);
             }
 
-            cameraShake = Math.max(cameraShake, 0.85);
-            gojoBloom = Math.max(gojoBloom, 0.45);
+            cameraShake = Math.max(cameraShake, 0.85 * blastScale);
+            gojoBloom = Math.max(gojoBloom, 0.45 * blastScale);
             sfx('bigexplode');
-            showFloatText('HOLLOW PURPLE — ANNIHILATION', '#e9d5ff');
+            showFloatText(shot.max ? 'IMAGINARY TECHNIQUE: HOLLOW PURPLE — MAXIMUM OUTPUT' : 'IMAGINARY TECHNIQUE: HOLLOW PURPLE', '#e9d5ff');
         }
 
         function updateGojoPurple(delta: number) {
@@ -3609,7 +3638,7 @@ let fxaaPass: ShaderPass | null = null;
                 shot.red.position.set(-sep, Math.sin(t * Math.PI) * 0.16, 0);
                 shot.blue.position.set(sep, -Math.sin(t * Math.PI) * 0.16, 0);
                 shot.group.rotation.z += delta * 4;
-                shot.group.scale.setScalar(0.62 + 0.38 * ease);
+                shot.group.scale.setScalar((0.62 + 0.38 * ease) * (shot.max ? 3 : 1));
                 shot.core.rotation.x += delta * 2;
                 shot.core.rotation.y += delta * 3;
                 shot.ringA.rotation.z += delta * 6;
@@ -3620,7 +3649,7 @@ let fxaaPass: ShaderPass | null = null;
                     shot.state = 'fly';
                     shot.red.visible = false;
                     shot.blue.visible = false;
-                    shot.group.scale.setScalar(1);
+                    shot.group.scale.setScalar(shot.max ? 3 : 1);
                     shot.core.scale.setScalar(1);
                     assets.coreMat.uniforms.uPower.value = 1;
                     assets.shellMat.uniforms.uFade.value = 1;
@@ -3687,6 +3716,103 @@ let fxaaPass: ShaderPass | null = null;
             }
             if ((armed && shot.pos.y < 0.9) || shot.life > 2.1) hit = true;
             if (hit) detonateHollowPurple();
+        }
+
+        function triggerMaxComboPurple(at: THREE.Vector3) {
+            if (gojoComboPurple) {
+                scene.remove(gojoComboPurple.group);
+                gojoComboPurple = null;
+            }
+            if (gojoBlueOrb) {
+                scene.remove(gojoBlueOrb.group);
+                gojoBlueOrb = null;
+            }
+            const assets = getHollowPurpleAssets();
+            const group = new THREE.Group();
+            group.position.copy(at);
+            group.scale.setScalar(3);
+            const core = new THREE.Mesh(assets.coreGeo, assets.coreMat);
+            const shell = new THREE.Mesh(assets.shellGeo, assets.shellMat);
+            const ringA = new THREE.Mesh(assets.ringGeoA, assets.ringMatA);
+            ringA.rotation.x = Math.PI / 2;
+            const ringB = new THREE.Mesh(assets.ringGeoB, assets.ringMatB);
+            ringB.rotation.y = Math.PI / 2;
+            group.add(core, shell, ringA, ringB);
+            scene.add(group);
+            assets.shellMat.uniforms.uFade.value = 1;
+            assets.ringMatA.opacity = 0.9;
+            assets.ringMatB.opacity = 0.7;
+            gojoComboPurple = { group, core, shell, ringA, ringB, pos: at.clone(), timer: 0.55 };
+            playPurpleTheme();
+            showFloatText('MAXIMUM OUTPUT — BLUE + RED: HOLLOW PURPLE', '#f0abfc');
+            cameraShake = Math.max(cameraShake, 0.4);
+            gojoBloom = Math.max(gojoBloom, 0.55);
+            sfx('beam');
+        }
+
+        function detonateMaxComboPurple() {
+            if (!gojoComboPurple) return;
+            const combo = gojoComboPurple;
+            const pos = combo.pos.clone();
+            scene.remove(combo.group);
+            gojoComboPurple = null;
+            const radius = 54;
+            for (const e of [...enemyEntities]) {
+                const d = e.position.distanceTo(pos);
+                if (d >= radius) continue;
+                const dmg = 43200 * (1 - (d / radius) * 0.45);
+                applyDamageToEntity(e, dmg, e.position.clone().setY(2.4), 'normal', true);
+                spawnDamageNumber(Math.ceil(dmg), e.position.clone().setY(4.2), 'normal');
+                e.stun = Math.max(e.stun || 0, 1.2);
+            }
+            const assets = getHollowPurpleAssets();
+            const nearCockpit = firstPersonView && pos.distanceTo(camera.position) < 60;
+            if (!nearCockpit) {
+                const shock = new THREE.Mesh(
+                    assets.impactGeo,
+                    new THREE.MeshBasicMaterial({
+                        color: 0x8b5cf6, wireframe: true, transparent: true, opacity: 0.7,
+                        blending: THREE.AdditiveBlending, depthWrite: false
+                    })
+                );
+                shock.position.copy(pos);
+                shock.scale.setScalar(3);
+                scene.add(shock);
+                particles.push({ mesh: shock, vel: new THREE.Vector3(), life: 0.5, maxLife: 0.5, scaleRate: 90, fade: true });
+                const flash = new THREE.Mesh(
+                    assets.impactGeo,
+                    new THREE.MeshBasicMaterial({
+                        color: 0xf0abfc, transparent: true, opacity: 0.55,
+                        blending: THREE.AdditiveBlending, depthWrite: false
+                    })
+                );
+                flash.position.copy(pos);
+                flash.scale.setScalar(3);
+                scene.add(flash);
+                particles.push({ mesh: flash, vel: new THREE.Vector3(), life: 0.28, maxLife: 0.28, scaleRate: 30, fade: true });
+                spawnHollowPurpleRing(pos, 0xf0abfc, 84, 0.6);
+                spawnHollowPurpleRing(pos, 0x7c3aed, 60, 0.5, true);
+                spawnExplosionParticles(pos, 0xa855f7, 30, 44);
+                spawnExplosionParticles(pos, 0x4c1d95, 12, 30);
+            }
+            cameraShake = Math.max(cameraShake, 1.5);
+            gojoBloom = Math.max(gojoBloom, 1.2);
+            sfx('bigexplode');
+            showFloatText('IMAGINARY TECHNIQUE: HOLLOW PURPLE — 600%', '#f5d0fe');
+        }
+
+        function updateGojoComboPurple(delta: number) {
+            if (!gojoComboPurple) return;
+            const combo = gojoComboPurple;
+            const assets = getHollowPurpleAssets();
+            assets.coreMat.uniforms.uTime.value = clock.elapsedTime;
+            assets.shellMat.uniforms.uTime.value = clock.elapsedTime;
+            combo.timer -= delta;
+            combo.core.rotation.y += delta * 4;
+            combo.ringA.rotation.z += delta * 8;
+            combo.ringB.rotation.x += delta * 10;
+            combo.group.scale.setScalar(3 * (1 + Math.sin(clock.elapsedTime * 9) * 0.05));
+            if (combo.timer <= 0) detonateMaxComboPurple();
         }
 
         function gojoNearestTarget(maxDist: number): MechEnemy | null {
@@ -3806,7 +3932,7 @@ let fxaaPass: ShaderPass | null = null;
             return redOrbAssets;
         }
 
-        function spawnCursedOrb(assets: CursedOrbAssets, kind: 'blue' | 'red', pos: THREE.Vector3, dir: THREE.Vector3, maxLife: number): CursedOrbState {
+        function spawnCursedOrb(assets: CursedOrbAssets, kind: 'blue' | 'red', pos: THREE.Vector3, dir: THREE.Vector3, maxLife: number, max: boolean): CursedOrbState {
             const group = new THREE.Group();
             group.position.copy(pos);
             group.scale.setScalar(0.78);
@@ -3822,7 +3948,7 @@ let fxaaPass: ShaderPass | null = null;
             scene.add(group);
             return {
                 kind, group, core, shell, ringA, ringB, motes,
-                pos: pos.clone(), dir: dir.clone(), life: 0, maxLife
+                pos: pos.clone(), dir: dir.clone(), life: 0, maxLife, max
             };
         }
 
@@ -3862,10 +3988,11 @@ let fxaaPass: ShaderPass | null = null;
                 showFloatText('NO TARGET IN RANGE', '#7dd3fc');
                 return;
             }
-            gojoTimers.blue = 7;
+            const max = gojoMaxOutput;
+            gojoTimers.blue = gojoCooldown(7);
             const pos = target.position.clone().setY(2.8 * target.scale);
-            gojoBlueOrb = spawnCursedOrb(getBlueOrbAssets(), 'blue', pos, new THREE.Vector3(0, 0, -1), 2.2);
-            gojoBlueOrb.group.scale.setScalar(1.35);
+            gojoBlueOrb = spawnCursedOrb(getBlueOrbAssets(), 'blue', pos, new THREE.Vector3(0, 0, -1), 2.2, max);
+            gojoBlueOrb.group.scale.setScalar(1.35 * (max ? 3 : 1));
             spawnHollowPurpleRing(pos, 0x2e7bff, 30, 0.45, true);
             showFloatText('CURSED TECHNIQUE — BLUE', '#6aa9ff');
             sfx('beam');
@@ -3879,7 +4006,13 @@ let fxaaPass: ShaderPass | null = null;
                 return;
             }
             if (gojoRedOrb) return;
-            gojoTimers.red = 7;
+            if (gojoMaxOutput && gojoBlueOrb && !gojoPurple && !gojoComboPurple) {
+                gojoTimers.red = gojoCooldown(7);
+                triggerMaxComboPurple(gojoBlueOrb.pos.clone());
+                return;
+            }
+            const max = gojoMaxOutput;
+            gojoTimers.red = gojoCooldown(7);
             const target = gojoNearestTarget(120);
             const eye = playerEntity.position.clone().setY(4.95);
             const aim = target ? target.position.clone().setY(2.6 * target.scale) : getAimPoint();
@@ -3887,8 +4020,8 @@ let fxaaPass: ShaderPass | null = null;
             if (dir.lengthSq() < 0.01) dir.set(0, 0, -1);
             dir.normalize();
             const spawn = eye.clone().addScaledVector(dir, firstPersonView ? 4.6 : 3.4);
-            gojoRedOrb = spawnCursedOrb(getRedOrbAssets(), 'red', spawn, dir, 1.5);
-            gojoRedOrb.group.scale.setScalar(1.0);
+            gojoRedOrb = spawnCursedOrb(getRedOrbAssets(), 'red', spawn, dir, 1.5, max);
+            gojoRedOrb.group.scale.setScalar(1.0 * (max ? 3 : 1));
             showFloatText('CURSED TECHNIQUE — RED', '#ff5a66');
             sfx('beam');
         }
@@ -3899,21 +4032,25 @@ let fxaaPass: ShaderPass | null = null;
             const pos = orb.pos.clone();
             scene.remove(orb.group);
             gojoRedOrb = null;
+            const max = orb.max;
+            const blastRadius = max ? 60 : 30;
+            const power = max ? 3 : 1;
+            const fxScale = max ? 2 : 1;
 
             for (const e of [...enemyEntities]) {
                 const d = e.position.distanceTo(pos);
-                if (d >= 30) continue;
-                const dmg = 1600 * (1 - (d / 30) * 0.55);
+                if (d >= blastRadius) continue;
+                const dmg = 1600 * power * (1 - (d / blastRadius) * 0.55);
                 const push = e.position.clone().sub(pos).setY(0);
                 if (push.lengthSq() < 0.01) push.set(1, 0, 0);
-                push.normalize().multiplyScalar(18 * (1 - d / 34));
+                push.normalize().multiplyScalar(18 * power * (1 - d / (blastRadius + 4)));
                 e.position.add(push);
                 applyDamageToEntity(e, dmg, e.position.clone().setY(2.4), 'normal', true);
                 spawnDamageNumber(Math.ceil(dmg), e.position.clone().setY(3.7), 'normal');
                 e.stun = Math.max(e.stun || 0, 0.35);
             }
 
-            const nearCockpit = firstPersonView && pos.distanceTo(camera.position) < 32;
+            const nearCockpit = firstPersonView && pos.distanceTo(camera.position) < (max ? 56 : 32);
             if (!nearCockpit) {
                 const assets = getRedOrbAssets();
                 const shock = new THREE.Mesh(
@@ -3921,23 +4058,25 @@ let fxaaPass: ShaderPass | null = null;
                     new THREE.MeshBasicMaterial({ color: 0xff3344, wireframe: true, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false })
                 );
                 shock.position.copy(pos);
+                shock.scale.setScalar(fxScale);
                 scene.add(shock);
-                particles.push({ mesh: shock, vel: new THREE.Vector3(), life: 0.42, maxLife: 0.42, scaleRate: 28, fade: true });
+                particles.push({ mesh: shock, vel: new THREE.Vector3(), life: 0.42, maxLife: 0.42, scaleRate: 28 * fxScale, fade: true });
 
                 const flash = new THREE.Mesh(
                     assets.shellGeo,
                     new THREE.MeshBasicMaterial({ color: 0xff8a6a, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false })
                 );
                 flash.position.copy(pos);
+                flash.scale.setScalar(fxScale);
                 scene.add(flash);
-                particles.push({ mesh: flash, vel: new THREE.Vector3(), life: 0.24, maxLife: 0.24, scaleRate: 14, fade: true });
+                particles.push({ mesh: flash, vel: new THREE.Vector3(), life: 0.24, maxLife: 0.24, scaleRate: 14 * fxScale, fade: true });
 
-                spawnHollowPurpleRing(pos, 0xff2f45, 58, 0.55);
-                spawnHollowPurpleRing(pos, 0xffb08a, 42, 0.45, true);
-                spawnExplosionParticles(pos, 0xff4d4d, 18, 30);
-                spawnExplosionParticles(pos, 0xffb000, 8, 22);
-                cameraShake = Math.max(cameraShake, 0.8);
-                gojoBloom = Math.max(gojoBloom, 0.42);
+                spawnHollowPurpleRing(pos, 0xff2f45, 58 * fxScale, 0.55);
+                spawnHollowPurpleRing(pos, 0xffb08a, 42 * fxScale, 0.45, true);
+                spawnExplosionParticles(pos, 0xff4d4d, 18 * fxScale, 30 * fxScale);
+                spawnExplosionParticles(pos, 0xffb000, 8 * fxScale, 22 * fxScale);
+                cameraShake = Math.max(cameraShake, 0.8 * fxScale);
+                gojoBloom = Math.max(gojoBloom, 0.42 * fxScale);
             }
             sfx('bigexplode');
             showFloatText('RED — REPULSION SHOCKWAVE', '#ffb08a');
@@ -4143,7 +4282,8 @@ let fxaaPass: ShaderPass | null = null;
             if (gojoDomain) return;
             const p = playerEntity.position;
             const inRange = enemyEntities.filter(e => e.position.distanceTo(p) < 80);
-            gojoTimers.domain = 20;
+            const max = gojoMaxOutput;
+            gojoTimers.domain = max ? 60 : 20;
             const center = p.clone().setY(4);
 
             const env = scene.getObjectByName('arena_env');
@@ -4244,7 +4384,7 @@ let fxaaPass: ShaderPass | null = null;
             gojoDomain = {
                 mesh: g, life: 6.0, shellMat, stars, starMat, arcs, arcMat, rings,
                 galaxy, galaxyMat, galaxyCore, galaxyCoreMat, blackHole, bhDisks, bhMotes, bhMoteMat, cosmosMats,
-                env: env || null, prevBg, prevFog, prevDustVisible
+                env: env || null, prevBg, prevFog, prevDustVisible, max
             };
 
             for (const e of inRange) e.stun = Math.max(e.stun || 0, 5.2);
@@ -4272,6 +4412,32 @@ let fxaaPass: ShaderPass | null = null;
             gojoBloom = Math.max(gojoBloom, 1.1);
         }
 
+        function gojoCooldown(base: number): number {
+            return base * (gojoMaxOutput ? 3 : 1);
+        }
+
+        function playPurpleTheme() {
+            try {
+                if (!purpleAudio) {
+                    purpleAudio = new Audio('assets/songs/purple.mp3');
+                    purpleAudio.preload = 'auto';
+                    purpleAudio.volume = 0.85;
+                }
+                purpleAudio.currentTime = 0;
+                const request = purpleAudio.play();
+                if (request && typeof request.catch === 'function') request.catch(() => { /* gesture-gated */ });
+            } catch (err) {
+                console.warn('Purple audio unavailable', err);
+            }
+        }
+
+        function toggleGojoMaxOutput() {
+            gojoMaxOutput = !gojoMaxOutput;
+            document.body.classList.toggle('max-output', gojoMaxOutput);
+            showFloatText(gojoMaxOutput ? 'MAXIMUM OUTPUT — 300% POWER / 300% COOLDOWN' : 'MAXIMUM OUTPUT — DISENGAGED', gojoMaxOutput ? '#ffb700' : '#9fe8ff');
+            sfx(gojoMaxOutput ? 'overheat' : 'hit');
+        }
+
         function toggleGojoInfinity() {
             gojoInfinityOn = !gojoInfinityOn;
             showFloatText(gojoInfinityOn ? 'INFINITY — ACTIVE' : 'INFINITY — RELEASED', gojoInfinityOn ? '#9fe8ff' : '#ff8a66');
@@ -4289,9 +4455,10 @@ let fxaaPass: ShaderPass | null = null;
             };
             set('blue', gojoBlueOrb ? 'ACTIVE' : (gojoTimers.blue > 0 ? `${Math.ceil(gojoTimers.blue)}s` : 'READY'), gojoTimers.blue > 0, false, !!gojoBlueOrb);
             set('red', gojoRedOrb ? 'FLY' : (gojoTimers.red > 0 ? `${Math.ceil(gojoTimers.red)}s` : 'READY'), gojoTimers.red > 0, false, !!gojoRedOrb);
-            set('purple', gojoPurple ? (gojoPurple.state === 'merge' ? 'MERGE' : 'FLY') : (gojoTimers.purple > 0 ? `${Math.ceil(gojoTimers.purple)}s` : 'READY'), gojoTimers.purple > 0, false, !!gojoPurple);
+            set('purple', gojoComboPurple ? 'COMBO' : (gojoPurple ? (gojoPurple.state === 'merge' ? 'MERGE' : 'FLY') : (gojoTimers.purple > 0 ? `${Math.ceil(gojoTimers.purple)}s` : 'READY')), gojoTimers.purple > 0, false, !!gojoPurple || !!gojoComboPurple);
             set('limitless', gojoInfinityOn ? 'ON' : 'OFF', false, !gojoInfinityOn);
             set('domain', gojoDomain ? 'VOID' : (gojoTimers.domain > 0 ? `${Math.ceil(gojoTimers.domain)}s` : 'READY'), gojoTimers.domain > 0, false, !!gojoDomain);
+            set('max', gojoMaxOutput ? 'ON' : 'OFF', false, !gojoMaxOutput, gojoMaxOutput);
         }
 
         /** Cooldowns and active technique effects; casts are keybound in the battle input handler. */
@@ -4305,6 +4472,7 @@ let fxaaPass: ShaderPass | null = null;
             gojoInfinityFx = Math.max(0, gojoInfinityFx - delta);
 
             updateGojoPurple(delta);
+            updateGojoComboPurple(delta);
 
             if (gojoBlueOrb) {
                 const orb = gojoBlueOrb;
@@ -4315,13 +4483,15 @@ let fxaaPass: ShaderPass | null = null;
                 assets.shellMat.uniforms.uFade.value = fade;
                 assets.ringMatA.opacity = 0.85 * fade;
                 assets.ringMatB.opacity = 0.65 * fade;
-                orb.group.scale.setScalar((0.95 + Math.sin(clock.elapsedTime * 6) * 0.04) * (0.82 + 0.18 * fade));
+                orb.group.scale.setScalar((0.95 + Math.sin(clock.elapsedTime * 6) * 0.04) * (0.82 + 0.18 * fade) * (orb.max ? 3 : 1));
+                const pullRadius = orb.max ? 66 : 22;
+                const power = orb.max ? 3 : 1;
                 for (const e of [...enemyEntities]) {
                     const d = e.position.distanceTo(orb.pos);
-                    if (d < 22) {
+                    if (d < pullRadius) {
                         const pull = orb.pos.clone().sub(e.position).setY(0).normalize();
-                        e.position.addScaledVector(pull, Math.min(d, 30) * delta * 1.4);
-                        applyDamageToEntity(e, 110 * delta, e.position.clone().setY(2.2), 'normal', true);
+                        e.position.addScaledVector(pull, Math.min(d, 30) * delta * 1.4 * power);
+                        applyDamageToEntity(e, 110 * delta * power, e.position.clone().setY(2.2), 'normal', true);
                     }
                 }
                 if (orb.life >= orb.maxLife) {
@@ -4442,7 +4612,7 @@ let fxaaPass: ShaderPass | null = null;
 
                 for (const e of [...enemyEntities]) {
                     if (e.position.distanceTo(p) < radius) {
-                        applyDamageToEntity(e, 420 * delta, e.position.clone().setY(2.2), 'normal', true);
+                        applyDamageToEntity(e, 420 * delta * (dome.max ? 3 : 1), e.position.clone().setY(2.2), 'normal', true);
                         e.stun = Math.max(e.stun || 0.35, 0.35);
                     }
                 }

@@ -20914,7 +20914,7 @@
   function now() {
     return (typeof performance === "undefined" ? Date : performance).now();
   }
-  var Audio = class extends Object3D {
+  var Audio2 = class extends Object3D {
     constructor(listener) {
       super();
       this.type = "Audio";
@@ -23944,7 +23944,7 @@
       }
     }
   });
-  Audio.prototype.load = function(file) {
+  Audio2.prototype.load = function(file) {
     console.warn("THREE.Audio: .load has been deprecated. Use THREE.AudioLoader instead.");
     const scope = this;
     const audioLoader = new AudioLoader();
@@ -25775,6 +25775,9 @@
   var gojoRedOrb = null;
   var gojoDomain = null;
   var gojoPurple = null;
+  var gojoComboPurple = null;
+  var gojoMaxOutput = false;
+  var purpleAudio = null;
   var gojoTimers = { blue: 0, red: 0, purple: 0, domain: 0 };
   var gojoInfinityOn = true;
   var gojoInfinityFx = 0;
@@ -26784,7 +26787,7 @@
   var GOJO_TECHNIQUES = [
     { id: "tech_blue", name: "Cursed Technique: Blue", desc: "Key 1 \u2014 a blue gravity orb that drags hostiles into a collapsing point.", color: 3046399 },
     { id: "tech_red", name: "Cursed Technique: Red", desc: "Key 2 \u2014 launch a red orb; its impact detonates a repulsion shockwave.", color: 16723781 },
-    { id: "tech_purple", name: "Hollow Technique: Purple", desc: "Key 3 or LMB \u2014 merge Blue and Red into a Hollow Purple annihilation orb.", color: 11032055 },
+    { id: "tech_purple", name: "Imaginary Technique: Hollow Purple", desc: "Key 3 or LMB \u2014 an annihilation orb. Under Maximum Output, a held Blue detonates with a fired Red.", color: 11032055 },
     { id: "tech_limitless", name: "Limitless: Infinity", desc: "Key 4 \u2014 toggle Infinity. Incoming force stalls; damage is almost nullified.", color: 10479871 },
     { id: "tech_domain", name: "Domain Expansion: Unlimited Void", desc: "Key 5 \u2014 a solid void barrier with a black hole and galaxy; traps hostiles in space.", color: 7158783 }
   ];
@@ -27997,7 +28000,7 @@
   var mousePos = new Vector2();
   function setupInputControls() {
     window.addEventListener("keydown", (e) => {
-      if (GAME_STATE.inBattle && ["KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "Backslash", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Numpad1", "Numpad2", "Numpad3", "Numpad4", "Numpad5"].includes(e.code)) e.preventDefault();
+      if (GAME_STATE.inBattle && ["KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "Backslash", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Numpad1", "Numpad2", "Numpad3", "Numpad4", "Numpad5", "Numpad6"].includes(e.code)) e.preventDefault();
       keys[e.code] = true;
       if (GAME_STATE.inBattle && e.code === "Space" && !e.repeat) tryBoostDash();
       if (GAME_STATE.inBattle && e.code === "ShiftLeft" && !e.repeat) toggleWingmanHold();
@@ -28008,6 +28011,7 @@
         else if (e.code === "Digit3" || e.code === "Numpad3") castHollowPurple();
         else if (e.code === "Digit4" || e.code === "Numpad4") toggleGojoInfinity();
         else if (e.code === "Digit5" || e.code === "Numpad5") castGojoDomain();
+        else if (e.code === "Digit6" || e.code === "Numpad6") toggleGojoMaxOutput();
       }
     });
     window.addEventListener("keyup", (e) => keys[e.code] = false);
@@ -28680,6 +28684,13 @@
       scene.remove(gojoRedOrb.group);
       gojoRedOrb = null;
     }
+    if (gojoComboPurple) {
+      scene.remove(gojoComboPurple.group);
+      gojoComboPurple = null;
+    }
+    gojoMaxOutput = false;
+    document.body.classList.remove("max-output");
+    if (purpleAudio) purpleAudio.pause();
     if (gojoPurple) {
       scene.remove(gojoPurple.group);
       scene.remove(gojoPurple.trail);
@@ -28905,20 +28916,22 @@
     if (!playerEntity) return;
     if (gojoTimers.purple > 0) {
       sfx("deny");
-      showFloatText(`HOLLOW PURPLE RECHARGING \u2014 ${Math.ceil(gojoTimers.purple)}s`, "#d8b4fe");
+      showFloatText(`IMAGINARY TECHNIQUE: HOLLOW PURPLE \u2014 RECHARGING ${Math.ceil(gojoTimers.purple)}s`, "#d8b4fe");
       return;
     }
-    if (gojoPurple) return;
-    gojoTimers.purple = 4.5;
+    if (gojoPurple || gojoComboPurple) return;
+    const max = gojoMaxOutput;
+    gojoTimers.purple = gojoCooldown(4.5);
     const assets = getHollowPurpleAssets();
     const eye = playerEntity.position.clone().setY(4.95);
     const dir = getAimPoint().sub(eye);
     if (dir.lengthSq() < 0.01) dir.set(0, 0, -1);
     dir.normalize();
     const muzzle = eye.clone().addScaledVector(dir, firstPersonView ? 5.5 : 4.2);
+    const outputScale = max ? 3 : 1;
     const group = new Group();
     group.position.copy(muzzle);
-    group.scale.setScalar(0.62);
+    group.scale.setScalar(0.62 * outputScale);
     const core = new Mesh(assets.coreGeo, assets.coreMat);
     const shell = new Mesh(assets.shellGeo, assets.shellMat);
     const ringA = new Mesh(assets.ringGeoA, assets.ringMatA);
@@ -28971,9 +28984,12 @@
       dir,
       state: "merge",
       timer: 0.38,
-      life: 0
+      life: 0,
+      max
     };
-    showFloatText("BLUE + RED \u2014 HOLLOW PURPLE", "#d8b4fe");
+    assets.trailMat.size = max ? 1.8 : 0.78;
+    showFloatText(max ? "IMAGINARY TECHNIQUE: HOLLOW PURPLE \u2014 MAXIMUM OUTPUT" : "IMAGINARY TECHNIQUE: HOLLOW PURPLE", "#d8b4fe");
+    if (max) playPurpleTheme();
     cameraShake = Math.max(cameraShake, 0.18);
     gojoBloom = Math.max(gojoBloom, 0.2);
     sfx("beam");
@@ -28985,11 +29001,14 @@
     scene.remove(shot.group);
     scene.remove(shot.trail);
     shot.trail.visible = false;
+    const blastRadius = shot.max ? 54 : 20;
+    const blastScale = shot.max ? 3 : 1;
+    getHollowPurpleAssets().trailMat.size = 0.78;
     gojoPurple = null;
     for (const e of [...enemyEntities]) {
       const d = e.position.distanceTo(pos);
-      if (d >= 18) continue;
-      const dmg = 7200 * (1 - d / 18 * 0.5);
+      if (d >= blastRadius) continue;
+      const dmg = 7200 * (shot.max ? 3 : 1) * (1 - d / blastRadius * 0.5);
       applyDamageToEntity(e, dmg, e.position.clone().setY(2.4), "normal", true);
       spawnDamageNumber(Math.ceil(dmg), e.position.clone().setY(3.7), "normal");
       e.stun = Math.max(e.stun || 0, 0.6);
@@ -29009,8 +29028,9 @@
     );
     if (!nearCockpit) {
       shock.position.copy(pos);
+      shock.scale.setScalar(blastScale);
       scene.add(shock);
-      particles.push({ mesh: shock, vel: new Vector3(), life: 0.42, maxLife: 0.42, scaleRate: 38, fade: true });
+      particles.push({ mesh: shock, vel: new Vector3(), life: 0.42, maxLife: 0.42, scaleRate: 38 * blastScale, fade: true });
       const flash = new Mesh(
         assets.impactGeo,
         new MeshBasicMaterial({
@@ -29022,17 +29042,18 @@
         })
       );
       flash.position.copy(pos);
+      flash.scale.setScalar(blastScale);
       scene.add(flash);
-      particles.push({ mesh: flash, vel: new Vector3(), life: 0.22, maxLife: 0.22, scaleRate: 12, fade: true });
-      spawnHollowPurpleRing(pos, 14202110, 26, 0.5);
-      spawnHollowPurpleRing(pos, 8141549, 18, 0.42, true);
-      spawnExplosionParticles(pos, 9133302, 14, 28);
-      spawnExplosionParticles(pos, 5972406, 6, 20);
+      particles.push({ mesh: flash, vel: new Vector3(), life: 0.22, maxLife: 0.22, scaleRate: 12 * blastScale, fade: true });
+      spawnHollowPurpleRing(pos, 14202110, 26 * blastScale, 0.5);
+      spawnHollowPurpleRing(pos, 8141549, 18 * blastScale, 0.42, true);
+      spawnExplosionParticles(pos, 9133302, 14 * blastScale, 28 * blastScale);
+      spawnExplosionParticles(pos, 5972406, 6 * blastScale, 20 * blastScale);
     }
-    cameraShake = Math.max(cameraShake, 0.85);
-    gojoBloom = Math.max(gojoBloom, 0.45);
+    cameraShake = Math.max(cameraShake, 0.85 * blastScale);
+    gojoBloom = Math.max(gojoBloom, 0.45 * blastScale);
     sfx("bigexplode");
-    showFloatText("HOLLOW PURPLE \u2014 ANNIHILATION", "#e9d5ff");
+    showFloatText(shot.max ? "IMAGINARY TECHNIQUE: HOLLOW PURPLE \u2014 MAXIMUM OUTPUT" : "IMAGINARY TECHNIQUE: HOLLOW PURPLE", "#e9d5ff");
   }
   function updateGojoPurple(delta) {
     if (!gojoPurple) return;
@@ -29056,7 +29077,7 @@
       shot.red.position.set(-sep, Math.sin(t * Math.PI) * 0.16, 0);
       shot.blue.position.set(sep, -Math.sin(t * Math.PI) * 0.16, 0);
       shot.group.rotation.z += delta * 4;
-      shot.group.scale.setScalar(0.62 + 0.38 * ease);
+      shot.group.scale.setScalar((0.62 + 0.38 * ease) * (shot.max ? 3 : 1));
       shot.core.rotation.x += delta * 2;
       shot.core.rotation.y += delta * 3;
       shot.ringA.rotation.z += delta * 6;
@@ -29067,7 +29088,7 @@
         shot.state = "fly";
         shot.red.visible = false;
         shot.blue.visible = false;
-        shot.group.scale.setScalar(1);
+        shot.group.scale.setScalar(shot.max ? 3 : 1);
         shot.core.scale.setScalar(1);
         assets.coreMat.uniforms.uPower.value = 1;
         assets.shellMat.uniforms.uFade.value = 1;
@@ -29136,6 +29157,107 @@
     }
     if (armed && shot.pos.y < 0.9 || shot.life > 2.1) hit = true;
     if (hit) detonateHollowPurple();
+  }
+  function triggerMaxComboPurple(at) {
+    if (gojoComboPurple) {
+      scene.remove(gojoComboPurple.group);
+      gojoComboPurple = null;
+    }
+    if (gojoBlueOrb) {
+      scene.remove(gojoBlueOrb.group);
+      gojoBlueOrb = null;
+    }
+    const assets = getHollowPurpleAssets();
+    const group = new Group();
+    group.position.copy(at);
+    group.scale.setScalar(3);
+    const core = new Mesh(assets.coreGeo, assets.coreMat);
+    const shell = new Mesh(assets.shellGeo, assets.shellMat);
+    const ringA = new Mesh(assets.ringGeoA, assets.ringMatA);
+    ringA.rotation.x = Math.PI / 2;
+    const ringB = new Mesh(assets.ringGeoB, assets.ringMatB);
+    ringB.rotation.y = Math.PI / 2;
+    group.add(core, shell, ringA, ringB);
+    scene.add(group);
+    assets.shellMat.uniforms.uFade.value = 1;
+    assets.ringMatA.opacity = 0.9;
+    assets.ringMatB.opacity = 0.7;
+    gojoComboPurple = { group, core, shell, ringA, ringB, pos: at.clone(), timer: 0.55 };
+    playPurpleTheme();
+    showFloatText("MAXIMUM OUTPUT \u2014 BLUE + RED: HOLLOW PURPLE", "#f0abfc");
+    cameraShake = Math.max(cameraShake, 0.4);
+    gojoBloom = Math.max(gojoBloom, 0.55);
+    sfx("beam");
+  }
+  function detonateMaxComboPurple() {
+    if (!gojoComboPurple) return;
+    const combo = gojoComboPurple;
+    const pos = combo.pos.clone();
+    scene.remove(combo.group);
+    gojoComboPurple = null;
+    const radius = 54;
+    for (const e of [...enemyEntities]) {
+      const d = e.position.distanceTo(pos);
+      if (d >= radius) continue;
+      const dmg = 43200 * (1 - d / radius * 0.45);
+      applyDamageToEntity(e, dmg, e.position.clone().setY(2.4), "normal", true);
+      spawnDamageNumber(Math.ceil(dmg), e.position.clone().setY(4.2), "normal");
+      e.stun = Math.max(e.stun || 0, 1.2);
+    }
+    const assets = getHollowPurpleAssets();
+    const nearCockpit = firstPersonView && pos.distanceTo(camera.position) < 60;
+    if (!nearCockpit) {
+      const shock = new Mesh(
+        assets.impactGeo,
+        new MeshBasicMaterial({
+          color: 9133302,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.7,
+          blending: AdditiveBlending,
+          depthWrite: false
+        })
+      );
+      shock.position.copy(pos);
+      shock.scale.setScalar(3);
+      scene.add(shock);
+      particles.push({ mesh: shock, vel: new Vector3(), life: 0.5, maxLife: 0.5, scaleRate: 90, fade: true });
+      const flash = new Mesh(
+        assets.impactGeo,
+        new MeshBasicMaterial({
+          color: 15772668,
+          transparent: true,
+          opacity: 0.55,
+          blending: AdditiveBlending,
+          depthWrite: false
+        })
+      );
+      flash.position.copy(pos);
+      flash.scale.setScalar(3);
+      scene.add(flash);
+      particles.push({ mesh: flash, vel: new Vector3(), life: 0.28, maxLife: 0.28, scaleRate: 30, fade: true });
+      spawnHollowPurpleRing(pos, 15772668, 84, 0.6);
+      spawnHollowPurpleRing(pos, 8141549, 60, 0.5, true);
+      spawnExplosionParticles(pos, 11032055, 30, 44);
+      spawnExplosionParticles(pos, 4988309, 12, 30);
+    }
+    cameraShake = Math.max(cameraShake, 1.5);
+    gojoBloom = Math.max(gojoBloom, 1.2);
+    sfx("bigexplode");
+    showFloatText("IMAGINARY TECHNIQUE: HOLLOW PURPLE \u2014 600%", "#f5d0fe");
+  }
+  function updateGojoComboPurple(delta) {
+    if (!gojoComboPurple) return;
+    const combo = gojoComboPurple;
+    const assets = getHollowPurpleAssets();
+    assets.coreMat.uniforms.uTime.value = clock.elapsedTime;
+    assets.shellMat.uniforms.uTime.value = clock.elapsedTime;
+    combo.timer -= delta;
+    combo.core.rotation.y += delta * 4;
+    combo.ringA.rotation.z += delta * 8;
+    combo.ringB.rotation.x += delta * 10;
+    combo.group.scale.setScalar(3 * (1 + Math.sin(clock.elapsedTime * 9) * 0.05));
+    if (combo.timer <= 0) detonateMaxComboPurple();
   }
   function gojoNearestTarget(maxDist) {
     if (!playerEntity) return null;
@@ -29248,7 +29370,7 @@
     if (!redOrbAssets) redOrbAssets = buildCursedOrbAssets(2359815, 11735583, 16739166, 7014162, 16751226, 16723781, 16756874);
     return redOrbAssets;
   }
-  function spawnCursedOrb(assets, kind, pos, dir, maxLife) {
+  function spawnCursedOrb(assets, kind, pos, dir, maxLife, max) {
     const group = new Group();
     group.position.copy(pos);
     group.scale.setScalar(0.78);
@@ -29273,7 +29395,8 @@
       pos: pos.clone(),
       dir: dir.clone(),
       life: 0,
-      maxLife
+      maxLife,
+      max
     };
   }
   function animateCursedOrb(orb, delta) {
@@ -29311,10 +29434,11 @@
       showFloatText("NO TARGET IN RANGE", "#7dd3fc");
       return;
     }
-    gojoTimers.blue = 7;
+    const max = gojoMaxOutput;
+    gojoTimers.blue = gojoCooldown(7);
     const pos = target.position.clone().setY(2.8 * target.scale);
-    gojoBlueOrb = spawnCursedOrb(getBlueOrbAssets(), "blue", pos, new Vector3(0, 0, -1), 2.2);
-    gojoBlueOrb.group.scale.setScalar(1.35);
+    gojoBlueOrb = spawnCursedOrb(getBlueOrbAssets(), "blue", pos, new Vector3(0, 0, -1), 2.2, max);
+    gojoBlueOrb.group.scale.setScalar(1.35 * (max ? 3 : 1));
     spawnHollowPurpleRing(pos, 3046399, 30, 0.45, true);
     showFloatText("CURSED TECHNIQUE \u2014 BLUE", "#6aa9ff");
     sfx("beam");
@@ -29327,7 +29451,13 @@
       return;
     }
     if (gojoRedOrb) return;
-    gojoTimers.red = 7;
+    if (gojoMaxOutput && gojoBlueOrb && !gojoPurple && !gojoComboPurple) {
+      gojoTimers.red = gojoCooldown(7);
+      triggerMaxComboPurple(gojoBlueOrb.pos.clone());
+      return;
+    }
+    const max = gojoMaxOutput;
+    gojoTimers.red = gojoCooldown(7);
     const target = gojoNearestTarget(120);
     const eye = playerEntity.position.clone().setY(4.95);
     const aim = target ? target.position.clone().setY(2.6 * target.scale) : getAimPoint();
@@ -29335,8 +29465,8 @@
     if (dir.lengthSq() < 0.01) dir.set(0, 0, -1);
     dir.normalize();
     const spawn = eye.clone().addScaledVector(dir, firstPersonView ? 4.6 : 3.4);
-    gojoRedOrb = spawnCursedOrb(getRedOrbAssets(), "red", spawn, dir, 1.5);
-    gojoRedOrb.group.scale.setScalar(1);
+    gojoRedOrb = spawnCursedOrb(getRedOrbAssets(), "red", spawn, dir, 1.5, max);
+    gojoRedOrb.group.scale.setScalar(1 * (max ? 3 : 1));
     showFloatText("CURSED TECHNIQUE \u2014 RED", "#ff5a66");
     sfx("beam");
   }
@@ -29346,19 +29476,23 @@
     const pos = orb.pos.clone();
     scene.remove(orb.group);
     gojoRedOrb = null;
+    const max = orb.max;
+    const blastRadius = max ? 60 : 30;
+    const power = max ? 3 : 1;
+    const fxScale = max ? 2 : 1;
     for (const e of [...enemyEntities]) {
       const d = e.position.distanceTo(pos);
-      if (d >= 30) continue;
-      const dmg = 1600 * (1 - d / 30 * 0.55);
+      if (d >= blastRadius) continue;
+      const dmg = 1600 * power * (1 - d / blastRadius * 0.55);
       const push = e.position.clone().sub(pos).setY(0);
       if (push.lengthSq() < 0.01) push.set(1, 0, 0);
-      push.normalize().multiplyScalar(18 * (1 - d / 34));
+      push.normalize().multiplyScalar(18 * power * (1 - d / (blastRadius + 4)));
       e.position.add(push);
       applyDamageToEntity(e, dmg, e.position.clone().setY(2.4), "normal", true);
       spawnDamageNumber(Math.ceil(dmg), e.position.clone().setY(3.7), "normal");
       e.stun = Math.max(e.stun || 0, 0.35);
     }
-    const nearCockpit = firstPersonView && pos.distanceTo(camera.position) < 32;
+    const nearCockpit = firstPersonView && pos.distanceTo(camera.position) < (max ? 56 : 32);
     if (!nearCockpit) {
       const assets = getRedOrbAssets();
       const shock = new Mesh(
@@ -29366,21 +29500,23 @@
         new MeshBasicMaterial({ color: 16724804, wireframe: true, transparent: true, opacity: 0.6, blending: AdditiveBlending, depthWrite: false })
       );
       shock.position.copy(pos);
+      shock.scale.setScalar(fxScale);
       scene.add(shock);
-      particles.push({ mesh: shock, vel: new Vector3(), life: 0.42, maxLife: 0.42, scaleRate: 28, fade: true });
+      particles.push({ mesh: shock, vel: new Vector3(), life: 0.42, maxLife: 0.42, scaleRate: 28 * fxScale, fade: true });
       const flash = new Mesh(
         assets.shellGeo,
         new MeshBasicMaterial({ color: 16747114, transparent: true, opacity: 0.45, blending: AdditiveBlending, depthWrite: false })
       );
       flash.position.copy(pos);
+      flash.scale.setScalar(fxScale);
       scene.add(flash);
-      particles.push({ mesh: flash, vel: new Vector3(), life: 0.24, maxLife: 0.24, scaleRate: 14, fade: true });
-      spawnHollowPurpleRing(pos, 16723781, 58, 0.55);
-      spawnHollowPurpleRing(pos, 16756874, 42, 0.45, true);
-      spawnExplosionParticles(pos, 16731469, 18, 30);
-      spawnExplosionParticles(pos, 16756736, 8, 22);
-      cameraShake = Math.max(cameraShake, 0.8);
-      gojoBloom = Math.max(gojoBloom, 0.42);
+      particles.push({ mesh: flash, vel: new Vector3(), life: 0.24, maxLife: 0.24, scaleRate: 14 * fxScale, fade: true });
+      spawnHollowPurpleRing(pos, 16723781, 58 * fxScale, 0.55);
+      spawnHollowPurpleRing(pos, 16756874, 42 * fxScale, 0.45, true);
+      spawnExplosionParticles(pos, 16731469, 18 * fxScale, 30 * fxScale);
+      spawnExplosionParticles(pos, 16756736, 8 * fxScale, 22 * fxScale);
+      cameraShake = Math.max(cameraShake, 0.8 * fxScale);
+      gojoBloom = Math.max(gojoBloom, 0.42 * fxScale);
     }
     sfx("bigexplode");
     showFloatText("RED \u2014 REPULSION SHOCKWAVE", "#ffb08a");
@@ -29608,7 +29744,8 @@
     if (gojoDomain) return;
     const p = playerEntity.position;
     const inRange = enemyEntities.filter((e) => e.position.distanceTo(p) < 80);
-    gojoTimers.domain = 20;
+    const max = gojoMaxOutput;
+    gojoTimers.domain = max ? 60 : 20;
     const center = p.clone().setY(4);
     const env = scene.getObjectByName("arena_env");
     const prevBg = scene.background instanceof Color ? scene.background.clone() : null;
@@ -29745,7 +29882,8 @@
       env: env || null,
       prevBg,
       prevFog,
-      prevDustVisible
+      prevDustVisible,
+      max
     };
     for (const e of inRange) e.stun = Math.max(e.stun || 0, 5.2);
     const overlay = byId("domain-overlay");
@@ -29772,6 +29910,30 @@
     cameraShake = Math.max(cameraShake, 0.9);
     gojoBloom = Math.max(gojoBloom, 1.1);
   }
+  function gojoCooldown(base) {
+    return base * (gojoMaxOutput ? 3 : 1);
+  }
+  function playPurpleTheme() {
+    try {
+      if (!purpleAudio) {
+        purpleAudio = new Audio("assets/songs/purple.mp3");
+        purpleAudio.preload = "auto";
+        purpleAudio.volume = 0.85;
+      }
+      purpleAudio.currentTime = 0;
+      const request = purpleAudio.play();
+      if (request && typeof request.catch === "function") request.catch(() => {
+      });
+    } catch (err) {
+      console.warn("Purple audio unavailable", err);
+    }
+  }
+  function toggleGojoMaxOutput() {
+    gojoMaxOutput = !gojoMaxOutput;
+    document.body.classList.toggle("max-output", gojoMaxOutput);
+    showFloatText(gojoMaxOutput ? "MAXIMUM OUTPUT \u2014 300% POWER / 300% COOLDOWN" : "MAXIMUM OUTPUT \u2014 DISENGAGED", gojoMaxOutput ? "#ffb700" : "#9fe8ff");
+    sfx(gojoMaxOutput ? "overheat" : "hit");
+  }
   function toggleGojoInfinity() {
     gojoInfinityOn = !gojoInfinityOn;
     showFloatText(gojoInfinityOn ? "INFINITY \u2014 ACTIVE" : "INFINITY \u2014 RELEASED", gojoInfinityOn ? "#9fe8ff" : "#ff8a66");
@@ -29788,9 +29950,10 @@
     };
     set("blue", gojoBlueOrb ? "ACTIVE" : gojoTimers.blue > 0 ? `${Math.ceil(gojoTimers.blue)}s` : "READY", gojoTimers.blue > 0, false, !!gojoBlueOrb);
     set("red", gojoRedOrb ? "FLY" : gojoTimers.red > 0 ? `${Math.ceil(gojoTimers.red)}s` : "READY", gojoTimers.red > 0, false, !!gojoRedOrb);
-    set("purple", gojoPurple ? gojoPurple.state === "merge" ? "MERGE" : "FLY" : gojoTimers.purple > 0 ? `${Math.ceil(gojoTimers.purple)}s` : "READY", gojoTimers.purple > 0, false, !!gojoPurple);
+    set("purple", gojoComboPurple ? "COMBO" : gojoPurple ? gojoPurple.state === "merge" ? "MERGE" : "FLY" : gojoTimers.purple > 0 ? `${Math.ceil(gojoTimers.purple)}s` : "READY", gojoTimers.purple > 0, false, !!gojoPurple || !!gojoComboPurple);
     set("limitless", gojoInfinityOn ? "ON" : "OFF", false, !gojoInfinityOn);
     set("domain", gojoDomain ? "VOID" : gojoTimers.domain > 0 ? `${Math.ceil(gojoTimers.domain)}s` : "READY", gojoTimers.domain > 0, false, !!gojoDomain);
+    set("max", gojoMaxOutput ? "ON" : "OFF", false, !gojoMaxOutput, gojoMaxOutput);
   }
   function updateGojoTechniques(delta) {
     if (!playerEntity) return;
@@ -29801,6 +29964,7 @@
     gojoTimers.domain = Math.max(0, gojoTimers.domain - delta);
     gojoInfinityFx = Math.max(0, gojoInfinityFx - delta);
     updateGojoPurple(delta);
+    updateGojoComboPurple(delta);
     if (gojoBlueOrb) {
       const orb = gojoBlueOrb;
       orb.life += delta;
@@ -29810,13 +29974,15 @@
       assets.shellMat.uniforms.uFade.value = fade;
       assets.ringMatA.opacity = 0.85 * fade;
       assets.ringMatB.opacity = 0.65 * fade;
-      orb.group.scale.setScalar((0.95 + Math.sin(clock.elapsedTime * 6) * 0.04) * (0.82 + 0.18 * fade));
+      orb.group.scale.setScalar((0.95 + Math.sin(clock.elapsedTime * 6) * 0.04) * (0.82 + 0.18 * fade) * (orb.max ? 3 : 1));
+      const pullRadius = orb.max ? 66 : 22;
+      const power = orb.max ? 3 : 1;
       for (const e of [...enemyEntities]) {
         const d = e.position.distanceTo(orb.pos);
-        if (d < 22) {
+        if (d < pullRadius) {
           const pull = orb.pos.clone().sub(e.position).setY(0).normalize();
-          e.position.addScaledVector(pull, Math.min(d, 30) * delta * 1.4);
-          applyDamageToEntity(e, 110 * delta, e.position.clone().setY(2.2), "normal", true);
+          e.position.addScaledVector(pull, Math.min(d, 30) * delta * 1.4 * power);
+          applyDamageToEntity(e, 110 * delta * power, e.position.clone().setY(2.2), "normal", true);
         }
       }
       if (orb.life >= orb.maxLife) {
@@ -29932,7 +30098,7 @@
       }
       for (const e of [...enemyEntities]) {
         if (e.position.distanceTo(p) < radius) {
-          applyDamageToEntity(e, 420 * delta, e.position.clone().setY(2.2), "normal", true);
+          applyDamageToEntity(e, 420 * delta * (dome.max ? 3 : 1), e.position.clone().setY(2.2), "normal", true);
           e.stun = Math.max(e.stun || 0.35, 0.35);
         }
       }
