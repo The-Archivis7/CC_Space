@@ -25772,6 +25772,7 @@
   var wingmanDrone = null;
   var mouseDown = false;
   var gojoBlueOrb = null;
+  var gojoRedOrb = null;
   var gojoDomain = null;
   var gojoPurple = null;
   var gojoTimers = { blue: 0, red: 0, purple: 0, domain: 0 };
@@ -26781,11 +26782,11 @@
     { id: "tech_3", name: "High-Velocity Acceleration", category: "Weapons", cost: 400, unlocked: false, desc: "+20% projectile speed and kinetic damage." }
   ];
   var GOJO_TECHNIQUES = [
-    { id: "tech_blue", name: "Cursed Technique: Blue", desc: "Key 1 \u2014 implosion vortex drags hostiles into a collapsing point.", color: 3046399 },
-    { id: "tech_red", name: "Cursed Technique: Red", desc: "Key 2 \u2014 reversal blast hurls hostiles back and shreds armor.", color: 16723781 },
+    { id: "tech_blue", name: "Cursed Technique: Blue", desc: "Key 1 \u2014 a blue gravity orb that drags hostiles into a collapsing point.", color: 3046399 },
+    { id: "tech_red", name: "Cursed Technique: Red", desc: "Key 2 \u2014 launch a red orb; its impact detonates a repulsion shockwave.", color: 16723781 },
     { id: "tech_purple", name: "Hollow Technique: Purple", desc: "Key 3 or LMB \u2014 merge Blue and Red into a Hollow Purple annihilation orb.", color: 11032055 },
     { id: "tech_limitless", name: "Limitless: Infinity", desc: "Key 4 \u2014 toggle Infinity. Incoming force stalls; damage is almost nullified.", color: 10479871 },
-    { id: "tech_domain", name: "Domain Expansion: Unlimited Void", desc: "Key 5 \u2014 traps every nearby hostile in an infinite information stream.", color: 7158783 }
+    { id: "tech_domain", name: "Domain Expansion: Unlimited Void", desc: "Key 5 \u2014 a solid void barrier with a black hole and galaxy; traps hostiles in space.", color: 7158783 }
   ];
   var GOJO_STATS = { hp: 14e3, shield: 8e3, energy: 600, speed: 110, heatCool: 120, damage: 4500 };
   var COLOR_PALETTES = {
@@ -26869,6 +26870,27 @@
     fxaaPass = new ShaderPass(FXAAShader);
     composer.addPass(fxaaPass);
     composer.setSize(window.innerWidth, window.innerHeight);
+    try {
+      const hp = getHollowPurpleAssets();
+      const blue = getBlueOrbAssets();
+      const red = getRedOrbAssets();
+      const warmScene = new Scene();
+      const warm = new Group();
+      warm.add(new Mesh(hp.coreGeo, hp.coreMat));
+      warm.add(new Mesh(hp.shellGeo, hp.shellMat));
+      warm.add(new Mesh(hp.ringGeoA, hp.ringMatA));
+      warm.add(new Points(hp.trailGeo, hp.trailMat));
+      warm.add(new Mesh(blue.coreGeo, blue.coreMat));
+      warm.add(new Mesh(blue.shellGeo, blue.shellMat));
+      warm.add(new Points(blue.moteGeo, blue.moteMat));
+      warm.add(new Mesh(red.coreGeo, red.coreMat));
+      warm.add(new Mesh(red.shellGeo, red.shellMat));
+      warm.add(new Points(red.moteGeo, red.moteMat));
+      warmScene.add(warm);
+      renderer.compile(warmScene, camera);
+    } catch (err) {
+      console.warn("Gojo technique prewarm skipped", err);
+    }
     const pr = renderer.getPixelRatio();
     fxaaPass.material.uniforms["resolution"].value.set(1 / (window.innerWidth * pr), 1 / (window.innerHeight * pr));
     const ambientLight = new AmbientLight(16777215, 0.6);
@@ -28651,13 +28673,17 @@
   }
   function clearGojoEffects() {
     if (gojoBlueOrb) {
-      scene.remove(gojoBlueOrb.mesh);
-      disposeObject3D(gojoBlueOrb.mesh);
+      scene.remove(gojoBlueOrb.group);
       gojoBlueOrb = null;
     }
+    if (gojoRedOrb) {
+      scene.remove(gojoRedOrb.group);
+      gojoRedOrb = null;
+    }
     if (gojoPurple) {
-      scene.remove(gojoPurple.mesh);
-      disposeObject3D(gojoPurple.mesh);
+      scene.remove(gojoPurple.group);
+      scene.remove(gojoPurple.trail);
+      gojoPurple.trail.visible = false;
       gojoPurple = null;
     }
     destroyGojoDomain();
@@ -28697,6 +28723,184 @@
     glowTexture = new CanvasTexture(canvas);
     return glowTexture;
   }
+  var purpleTrailTexture = null;
+  function getPurpleTrailTexture() {
+    if (purpleTrailTexture) return purpleTrailTexture;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 64;
+    const ctx = canvas.getContext("2d");
+    const grd = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grd.addColorStop(0, "rgba(230,190,255,1)");
+    grd.addColorStop(0.28, "rgba(180,105,255,0.9)");
+    grd.addColorStop(0.62, "rgba(109,40,217,0.34)");
+    grd.addColorStop(1, "rgba(76,29,149,0)");
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, 64, 64);
+    const tex = new CanvasTexture(canvas);
+    purpleTrailTexture = tex;
+    return tex;
+  }
+  var HP_TRAIL_COUNT = 64;
+  var HP_CORE_VERT = `
+            varying vec3 vNormal;
+            varying vec3 vViewDir;
+            varying vec3 vLocal;
+            void main() {
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                vNormal = normalize(normalMatrix * normal);
+                vViewDir = normalize(-mvPosition.xyz);
+                vLocal = normalize(position);
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `;
+  var HP_CORE_FRAG = `
+            uniform float uTime;
+            uniform float uPower;
+            varying vec3 vNormal;
+            varying vec3 vViewDir;
+            varying vec3 vLocal;
+            float hash(vec3 p) {
+                p = fract(p * 0.3183099 + vec3(0.11, 0.17, 0.13));
+                p *= 17.0;
+                return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+            }
+            float noise(vec3 p) {
+                vec3 i = floor(p);
+                vec3 f = fract(p);
+                f = f * f * (3.0 - 2.0 * f);
+                return mix(
+                    mix(mix(hash(i + vec3(0.0, 0.0, 0.0)), hash(i + vec3(1.0, 0.0, 0.0)), f.x),
+                        mix(hash(i + vec3(0.0, 1.0, 0.0)), hash(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+                    mix(mix(hash(i + vec3(0.0, 0.0, 1.0)), hash(i + vec3(1.0, 0.0, 1.0)), f.x),
+                        mix(hash(i + vec3(0.0, 1.0, 1.0)), hash(i + vec3(1.0, 1.0, 1.0)), f.x), f.y),
+                    f.z);
+            }
+            void main() {
+                vec3 n = normalize(vNormal);
+                vec3 v = normalize(vViewDir);
+                float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 2.4);
+                float t = uTime;
+                vec3 q = vLocal;
+                float n1 = noise(q * 3.2 + vec3(0.0, t * 0.45, t * 0.2));
+                float n2 = noise(q * 7.0 - vec3(t * 0.3, 0.0, t * 0.55));
+                float bands = 0.5 + 0.5 * sin(q.y * 9.0 + q.x * 5.0 + n1 * 5.0 + t * 3.0);
+                float energy = clamp(n1 * 0.55 + n2 * 0.3 + bands * 0.35, 0.0, 1.0);
+                vec3 deep = vec3(0.10, 0.015, 0.30);
+                vec3 violet = vec3(0.44, 0.08, 1.0);
+                vec3 hot = vec3(0.86, 0.44, 1.0);
+                float filament = smoothstep(0.62, 0.96, bands) * smoothstep(0.15, 0.95, n2);
+                vec3 col = mix(deep, violet, 0.42 + energy * 0.58);
+                col = mix(col, hot, clamp(fres * 0.55 + energy * 0.22 * uPower, 0.0, 1.0));
+                col += hot * filament * 0.55;
+                col += hot * pow(fres, 3.0) * 0.6;
+                col *= 0.92 + 0.16 * sin(t * 4.0 + n1 * 6.0);
+                gl_FragColor = vec4(col, 1.0);
+            }
+        `;
+  var HP_SHELL_FRAG = `
+            uniform float uTime;
+            uniform float uFade;
+            varying vec3 vNormal;
+            varying vec3 vViewDir;
+            varying vec3 vLocal;
+            void main() {
+                float ndv = abs(dot(normalize(vNormal), normalize(vViewDir)));
+                float fres = pow(1.0 - ndv, 2.6);
+                float pulse = 0.82 + 0.18 * sin(uTime * 8.0);
+                vec3 col = mix(vec3(0.38, 0.06, 1.0), vec3(0.82, 0.40, 1.0), fres);
+                gl_FragColor = vec4(col, fres * 0.72 * uFade * pulse);
+            }
+        `;
+  var hollowPurpleAssets = null;
+  function getHollowPurpleAssets() {
+    if (hollowPurpleAssets) return hollowPurpleAssets;
+    const trailPositions = new Float32Array(HP_TRAIL_COUNT * 3);
+    const trailColors = new Float32Array(HP_TRAIL_COUNT * 3);
+    const trailAges = new Float32Array(HP_TRAIL_COUNT).fill(999);
+    const motePositions = new Float32Array(12 * 3);
+    const moteGeo = new BufferGeometry();
+    moteGeo.setAttribute("position", new BufferAttribute(motePositions, 3));
+    const moteMat = new PointsMaterial({
+      size: 0.2,
+      map: getPurpleTrailTexture(),
+      color: 12616956,
+      transparent: true,
+      opacity: 0.95,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true
+    });
+    const trailGeo = new BufferGeometry();
+    trailGeo.setAttribute("position", new BufferAttribute(trailPositions, 3));
+    trailGeo.setAttribute("color", new BufferAttribute(trailColors, 3));
+    trailGeo.setDrawRange(0, HP_TRAIL_COUNT);
+    const trailMat = new PointsMaterial({
+      size: 0.78,
+      map: getPurpleTrailTexture(),
+      transparent: true,
+      opacity: 0.95,
+      vertexColors: true,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true
+    });
+    hollowPurpleAssets = {
+      coreGeo: new SphereGeometry(0.72, 32, 24),
+      shellGeo: new SphereGeometry(1.12, 28, 18),
+      ringGeoA: new TorusGeometry(1.22, 0.035, 6, 48),
+      ringGeoB: new TorusGeometry(1.03, 0.028, 6, 40),
+      redGeo: new SphereGeometry(0.3, 12, 10),
+      blueGeo: new SphereGeometry(0.3, 12, 10),
+      impactGeo: new SphereGeometry(0.8, 12, 8),
+      impactRingGeo: new RingGeometry(0.8, 1.05, 40),
+      moteGeo,
+      moteMat,
+      motePositions,
+      coreMat: new ShaderMaterial({
+        uniforms: { uTime: { value: 0 }, uPower: { value: 1 } },
+        vertexShader: HP_CORE_VERT,
+        fragmentShader: HP_CORE_FRAG
+      }),
+      shellMat: new ShaderMaterial({
+        uniforms: { uTime: { value: 0 }, uFade: { value: 1 } },
+        vertexShader: HP_CORE_VERT,
+        fragmentShader: HP_SHELL_FRAG,
+        transparent: true,
+        depthWrite: false,
+        blending: AdditiveBlending,
+        side: FrontSide
+      }),
+      ringMatA: new MeshBasicMaterial({ color: 8141549, transparent: true, opacity: 0.85, blending: AdditiveBlending, depthWrite: false }),
+      ringMatB: new MeshBasicMaterial({ color: 11032055, transparent: true, opacity: 0.68, blending: AdditiveBlending, depthWrite: false }),
+      redMat: new MeshBasicMaterial({ color: 15680580 }),
+      blueMat: new MeshBasicMaterial({ color: 2450411 }),
+      trailGeo,
+      trailMat,
+      trailPositions,
+      trailColors,
+      trailAges
+    };
+    return hollowPurpleAssets;
+  }
+  function spawnHollowPurpleRing(pos, color, grow, life, faceCamera = false) {
+    const assets = getHollowPurpleAssets();
+    const ring = new Mesh(
+      assets.impactRingGeo,
+      new MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.85,
+        side: DoubleSide,
+        blending: AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    ring.position.copy(pos);
+    if (faceCamera) ring.lookAt(camera.position);
+    else ring.rotation.x = -Math.PI / 2;
+    scene.add(ring);
+    particles.push({ mesh: ring, ring: true, vel: new Vector3(), life, maxLife: life, ringGrow: grow });
+  }
   function castHollowPurple() {
     if (!playerEntity) return;
     if (gojoTimers.purple > 0) {
@@ -28706,197 +28910,232 @@
     }
     if (gojoPurple) return;
     gojoTimers.purple = 4.5;
-    const p = playerEntity.position;
-    const muzzle = p.clone().setY(4.6);
-    if (firstPersonView) muzzle.copy(p).setY(4.95).addScaledVector(getFPCameraDir(), 8);
-    let dir = getAimPoint().sub(muzzle);
+    const assets = getHollowPurpleAssets();
+    const eye = playerEntity.position.clone().setY(4.95);
+    const dir = getAimPoint().sub(eye);
     if (dir.lengthSq() < 0.01) dir.set(0, 0, -1);
     dir.normalize();
-    const assist = gojoNearestTarget(100);
-    if (assist) {
-      const toTarget = assist.position.clone().setY(2.7 * assist.scale).sub(muzzle);
-      if (toTarget.lengthSq() > 0.01) {
-        const toDir = toTarget.clone().normalize();
-        if (toDir.dot(dir) > 0.05) dir.copy(toDir);
-      }
+    const muzzle = eye.clone().addScaledVector(dir, firstPersonView ? 5.5 : 4.2);
+    const group = new Group();
+    group.position.copy(muzzle);
+    group.scale.setScalar(0.62);
+    const core = new Mesh(assets.coreGeo, assets.coreMat);
+    const shell = new Mesh(assets.shellGeo, assets.shellMat);
+    const ringA = new Mesh(assets.ringGeoA, assets.ringMatA);
+    ringA.rotation.x = Math.PI / 2;
+    const ringB = new Mesh(assets.ringGeoB, assets.ringMatB);
+    ringB.rotation.y = Math.PI / 2;
+    const red = new Mesh(assets.redGeo, assets.redMat);
+    red.position.set(-1.2, 0, 0);
+    const blue = new Mesh(assets.blueGeo, assets.blueMat);
+    blue.position.set(1.2, 0, 0);
+    const motes = new Points(assets.moteGeo, assets.moteMat);
+    motes.frustumCulled = false;
+    group.add(core, shell, ringA, ringB, red, blue, motes);
+    scene.add(group);
+    const trail = new Points(assets.trailGeo, assets.trailMat);
+    trail.frustumCulled = false;
+    trail.visible = true;
+    scene.add(trail);
+    assets.trailAges.fill(999);
+    assets.trailColors.fill(0);
+    for (let i = 0; i < HP_TRAIL_COUNT; i++) {
+      assets.trailPositions[i * 3] = muzzle.x;
+      assets.trailPositions[i * 3 + 1] = muzzle.y;
+      assets.trailPositions[i * 3 + 2] = muzzle.z;
     }
-    if (dir.y < -0.12) {
-      dir.y = -0.12;
-      dir.normalize();
-    }
-    const g = new Group();
-    g.position.copy(muzzle);
-    g.add(new Mesh(
-      new SphereGeometry(1.4, 24, 24),
-      new MeshBasicMaterial({ color: 8141549, transparent: true, opacity: 0.06, blending: AdditiveBlending, depthWrite: false })
-    ));
-    const redOrb = new Mesh(
-      new SphereGeometry(0.85, 20, 20),
-      new MeshBasicMaterial({ color: 16726862, transparent: true, opacity: 0.95, blending: AdditiveBlending, depthWrite: false })
-    );
-    redOrb.position.set(-1.45, 0, 0);
-    g.add(redOrb);
-    const blueOrb = new Mesh(
-      new SphereGeometry(0.85, 20, 20),
-      new MeshBasicMaterial({ color: 3900159, transparent: true, opacity: 0.95, blending: AdditiveBlending, depthWrite: false })
-    );
-    blueOrb.position.set(1.45, 0, 0);
-    g.add(blueOrb);
-    const core = new Mesh(
-      new SphereGeometry(0.55, 20, 20),
-      new MeshBasicMaterial({ color: 12616956 })
-    );
-    core.scale.setScalar(0.15);
-    g.add(core);
-    const ring = new Mesh(
-      new TorusGeometry(1.6, 0.045, 8, 60),
-      new MeshBasicMaterial({ color: 14202110, transparent: true, opacity: 0.8, blending: AdditiveBlending, depthWrite: false })
-    );
-    ring.rotation.x = Math.PI / 2;
-    g.add(ring);
-    const halo = new Sprite(new SpriteMaterial({
-      map: getGlowTexture(),
-      color: 11032055,
-      transparent: true,
-      opacity: 0.15,
-      blending: AdditiveBlending,
-      depthWrite: false
-    }));
-    halo.scale.set(2.2, 2.2, 1);
-    g.add(halo);
-    g.add(new PointLight(11032055, 7, 42));
-    scene.add(g);
+    assets.trailGeo.attributes.position.needsUpdate = true;
+    assets.trailGeo.attributes.color.needsUpdate = true;
+    assets.coreMat.uniforms.uPower.value = 0.35;
+    assets.shellMat.uniforms.uFade.value = 0;
+    assets.ringMatA.opacity = 0.25;
+    assets.ringMatB.opacity = 0.2;
+    core.rotation.set(0, 0, 0);
+    ringA.rotation.set(Math.PI / 2, 0, 0);
+    ringB.rotation.set(0, Math.PI / 2, 0);
     gojoPurple = {
-      mesh: g,
+      group,
+      core,
+      shell,
+      ringA,
+      ringB,
+      red,
+      blue,
+      motes,
+      trail,
+      trailPositions: assets.trailPositions,
+      trailColors: assets.trailColors,
+      trailAges: assets.trailAges,
+      trailHead: 0,
       pos: muzzle.clone(),
       dir,
       state: "merge",
-      timer: 1,
-      life: 0,
-      trailTimer: 0,
-      redOrb,
-      blueOrb,
-      core
+      timer: 0.38,
+      life: 0
     };
     showFloatText("BLUE + RED \u2014 HOLLOW PURPLE", "#d8b4fe");
-    cameraShake = Math.max(cameraShake, 0.25);
-    gojoBloom = Math.max(gojoBloom, 0.4);
+    cameraShake = Math.max(cameraShake, 0.18);
+    gojoBloom = Math.max(gojoBloom, 0.2);
     sfx("beam");
   }
   function detonateHollowPurple() {
     if (!gojoPurple) return;
     const shot = gojoPurple;
-    const pos = shot.mesh.position.clone();
-    scene.remove(shot.mesh);
-    disposeObject3D(shot.mesh);
+    const pos = shot.pos.clone();
+    scene.remove(shot.group);
+    scene.remove(shot.trail);
+    shot.trail.visible = false;
     gojoPurple = null;
     for (const e of [...enemyEntities]) {
       const d = e.position.distanceTo(pos);
-      if (d >= 20) continue;
-      const dmg = 7200 * (1 - d / 20 * 0.5);
+      if (d >= 18) continue;
+      const dmg = 7200 * (1 - d / 18 * 0.5);
       applyDamageToEntity(e, dmg, e.position.clone().setY(2.4), "normal", true);
       spawnDamageNumber(Math.ceil(dmg), e.position.clone().setY(3.7), "normal");
       e.stun = Math.max(e.stun || 0, 0.6);
     }
-    for (let i = 0; i < 3; i++) {
-      const ring = new Mesh(
-        new RingGeometry(0.7, 1.05, 64),
+    const assets = getHollowPurpleAssets();
+    const nearCockpit = firstPersonView && pos.distanceTo(camera.position) < 24;
+    const shock = new Mesh(
+      assets.impactGeo,
+      new MeshBasicMaterial({
+        color: 9133302,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.62,
+        blending: AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    if (!nearCockpit) {
+      shock.position.copy(pos);
+      scene.add(shock);
+      particles.push({ mesh: shock, vel: new Vector3(), life: 0.42, maxLife: 0.42, scaleRate: 38, fade: true });
+      const flash = new Mesh(
+        assets.impactGeo,
         new MeshBasicMaterial({
-          color: i === 0 ? 16115967 : i === 1 ? 11032055 : 16734840,
+          color: 12616956,
           transparent: true,
-          opacity: 0.9,
-          side: DoubleSide,
+          opacity: 0.5,
           blending: AdditiveBlending,
           depthWrite: false
         })
       );
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.set(pos.x, 0.35 + i * 0.8, pos.z);
-      scene.add(ring);
-      particles.push({ mesh: ring, ring: true, vel: new Vector3(), life: 0.8 + i * 0.18, maxLife: 0.8 + i * 0.18, ringGrow: 58 + i * 22 });
+      flash.position.copy(pos);
+      scene.add(flash);
+      particles.push({ mesh: flash, vel: new Vector3(), life: 0.22, maxLife: 0.22, scaleRate: 12, fade: true });
+      spawnHollowPurpleRing(pos, 14202110, 26, 0.5);
+      spawnHollowPurpleRing(pos, 8141549, 18, 0.42, true);
+      spawnExplosionParticles(pos, 9133302, 14, 28);
+      spawnExplosionParticles(pos, 5972406, 6, 20);
     }
-    const flash = new Mesh(
-      new SphereGeometry(1.4, 20, 20),
-      new MeshBasicMaterial({ color: 11766015, transparent: true, opacity: 0.65, blending: AdditiveBlending, depthWrite: false })
-    );
-    flash.position.copy(pos);
-    scene.add(flash);
-    particles.push({ mesh: flash, life: 0.4, maxLife: 0.4, scaleRate: 14, fade: true });
-    spawnExplosionParticles(pos, 11032055, 34, 38);
-    spawnExplosionParticles(pos, 16731501, 12, 28);
-    spawnExplosionParticles(pos, 5999871, 12, 28);
-    cameraShake = Math.max(cameraShake, 1.2);
-    gojoBloom = 1.5;
+    cameraShake = Math.max(cameraShake, 0.85);
+    gojoBloom = Math.max(gojoBloom, 0.45);
     sfx("bigexplode");
     showFloatText("HOLLOW PURPLE \u2014 ANNIHILATION", "#e9d5ff");
   }
   function updateGojoPurple(delta) {
     if (!gojoPurple) return;
     const shot = gojoPurple;
+    const assets = getHollowPurpleAssets();
+    assets.coreMat.uniforms.uTime.value = clock.elapsedTime;
+    assets.shellMat.uniforms.uTime.value = clock.elapsedTime;
+    for (let i = 0; i < 12; i++) {
+      const a = clock.elapsedTime * (1.6 + i * 0.045) + i * (Math.PI * 2 / 12);
+      const r = 1.18 + Math.sin(clock.elapsedTime * 2.4 + i) * 0.09;
+      assets.motePositions[i * 3] = Math.cos(a) * r;
+      assets.motePositions[i * 3 + 1] = Math.sin(a * 2.2 + i) * 0.46;
+      assets.motePositions[i * 3 + 2] = Math.sin(a) * r;
+    }
+    assets.moteGeo.attributes.position.needsUpdate = true;
     if (shot.state === "merge") {
       shot.timer -= delta;
-      const t = 1 - Math.max(0, shot.timer) / 1;
-      const spin = t * Math.PI * 2.4;
-      const sep = 1.6 * (1 - t);
-      shot.redOrb.position.set(Math.cos(spin) * sep, Math.sin(spin) * sep * 0.45, Math.sin(spin * 0.7) * sep * 0.35);
-      shot.blueOrb.position.set(-Math.cos(spin) * sep, -Math.sin(spin) * sep * 0.45, -Math.sin(spin * 0.7) * sep * 0.35);
-      shot.core.scale.setScalar(0.06 + Math.max(0, t - 0.65) * 3.4);
-      shot.mesh.rotation.z += delta * 6;
+      const t = Math.min(1, Math.max(0, 1 - shot.timer / 0.38));
+      const ease = t * t * (3 - 2 * t);
+      const sep = 1.2 * (1 - ease);
+      shot.red.position.set(-sep, Math.sin(t * Math.PI) * 0.16, 0);
+      shot.blue.position.set(sep, -Math.sin(t * Math.PI) * 0.16, 0);
+      shot.group.rotation.z += delta * 4;
+      shot.group.scale.setScalar(0.62 + 0.38 * ease);
+      shot.core.rotation.x += delta * 2;
+      shot.core.rotation.y += delta * 3;
+      shot.ringA.rotation.z += delta * 6;
+      shot.ringB.rotation.x += delta * 7;
+      assets.coreMat.uniforms.uPower.value = 0.35 + ease * 0.65;
+      assets.shellMat.uniforms.uFade.value = ease;
       if (shot.timer <= 0) {
         shot.state = "fly";
-        shot.redOrb.visible = false;
-        shot.blueOrb.visible = false;
-        shot.core.scale.setScalar(1.25);
-        shot.mesh.scale.setScalar(1);
-        spawnExplosionParticles(shot.pos, 14202110, 14, 10);
-        gojoBloom = Math.max(gojoBloom, 1.1);
-        sfx("bigexplode");
+        shot.red.visible = false;
+        shot.blue.visible = false;
+        shot.group.scale.setScalar(1);
+        shot.core.scale.setScalar(1);
+        assets.coreMat.uniforms.uPower.value = 1;
+        assets.shellMat.uniforms.uFade.value = 1;
+        assets.ringMatA.opacity = 0.85;
+        assets.ringMatB.opacity = 0.68;
+        spawnHollowPurpleRing(shot.pos, 11032055, 30, 0.32, true);
+        gojoBloom = Math.max(gojoBloom, 0.32);
+        cameraShake = Math.max(cameraShake, 0.25);
       }
-      shot.mesh.position.copy(shot.pos);
+      shot.group.position.copy(shot.pos);
       return;
     }
     shot.life += delta;
-    let homing = null, homingDist = 90;
-    for (const e of enemyEntities) {
-      const d = e.position.distanceTo(shot.pos);
-      if (d < homingDist) {
-        homingDist = d;
-        homing = e;
-      }
+    const px2 = shot.pos.x, py2 = shot.pos.y, pz2 = shot.pos.z;
+    shot.pos.addScaledVector(shot.dir, 112 * delta);
+    shot.group.position.copy(shot.pos);
+    shot.group.rotation.z += delta * 1.6;
+    shot.core.rotation.x += delta * 2.4;
+    shot.core.rotation.y += delta * 3.6;
+    shot.ringA.rotation.z += delta * 5.2;
+    shot.ringB.rotation.x += delta * 7;
+    for (let i = 0; i < HP_TRAIL_COUNT; i++) {
+      if (shot.trailAges[i] >= 900) continue;
+      shot.trailAges[i] += delta;
+      const f = Math.max(0, 1 - shot.trailAges[i] / 0.42);
+      const ff = f * f;
+      shot.trailColors[i * 3] = 0.52 * ff;
+      shot.trailColors[i * 3 + 1] = 0.12 * ff;
+      shot.trailColors[i * 3 + 2] = 1 * ff;
     }
-    if (homing) {
-      const desired = homing.position.clone().setY(2.7 * homing.scale).sub(shot.pos).normalize();
-      shot.dir.lerp(desired, Math.min(1, delta * 1.8)).normalize();
+    const steps = Math.max(1, Math.min(6, Math.ceil(112 * delta / 0.75)));
+    for (let s = 1; s <= steps; s++) {
+      const a = s / steps;
+      const i = shot.trailHead % HP_TRAIL_COUNT;
+      shot.trailHead++;
+      shot.trailPositions[i * 3] = px2 + (shot.pos.x - px2) * a + (Math.random() - 0.5) * 0.12;
+      shot.trailPositions[i * 3 + 1] = py2 + (shot.pos.y - py2) * a + (Math.random() - 0.5) * 0.12;
+      shot.trailPositions[i * 3 + 2] = pz2 + (shot.pos.z - pz2) * a + (Math.random() - 0.5) * 0.12;
+      shot.trailAges[i] = 0;
+      shot.trailColors[i * 3] = 0.62;
+      shot.trailColors[i * 3 + 1] = 0.18;
+      shot.trailColors[i * 3 + 2] = 1;
     }
-    shot.pos.addScaledVector(shot.dir, 92 * delta);
-    shot.mesh.position.copy(shot.pos);
-    shot.mesh.rotation.z += delta * 16;
-    shot.mesh.rotation.y += delta * 9;
-    shot.trailTimer -= delta;
-    if (shot.trailTimer <= 0) {
-      shot.trailTimer = 0.032;
-      const trailColors = [14202110, 11032055, 16734840, 5999871];
-      spawnExplosionParticles(shot.pos, trailColors[Math.floor(Math.random() * trailColors.length)], 1, 3);
-    }
+    assets.trailGeo.attributes.position.needsUpdate = true;
+    assets.trailGeo.attributes.color.needsUpdate = true;
     let hit = false;
+    const armed = shot.life > 0.06;
     for (const e of enemyEntities) {
-      const center = e.position.clone().setY(2.7 * e.scale);
-      if (center.distanceTo(shot.pos) < e.radius + 2.4) {
+      if (!armed) break;
+      const dx = e.position.x - shot.pos.x;
+      const dy = 2.7 * e.scale - shot.pos.y;
+      const dz = e.position.z - shot.pos.z;
+      const rr = e.radius + 1.8;
+      if (dx * dx + dy * dy + dz * dz < rr * rr) {
         hit = true;
         break;
       }
     }
-    if (!hit) {
+    if (!hit && armed) {
       for (const obs of arenaObstacles) {
-        if (Math.abs(shot.pos.x - obs.pos.x) < obs.halfSize + 2 && Math.abs(shot.pos.z - obs.pos.z) < obs.halfSize + 2) {
+        if (Math.abs(shot.pos.x - obs.pos.x) < obs.halfSize + 1.6 && Math.abs(shot.pos.z - obs.pos.z) < obs.halfSize + 1.6) {
           hit = true;
           break;
         }
       }
     }
-    if (shot.pos.y < 0.8 || shot.life > 2.1) hit = true;
+    if (armed && shot.pos.y < 0.9 || shot.life > 2.1) hit = true;
     if (hit) detonateHollowPurple();
-    else gojoBloom = Math.max(gojoBloom, 0.3);
   }
   function gojoNearestTarget(maxDist) {
     if (!playerEntity) return null;
@@ -28910,6 +29149,150 @@
     }
     return target;
   }
+  var CURSED_CORE_FRAG = `
+            uniform float uTime;
+            uniform float uPower;
+            uniform vec3 uDeep;
+            uniform vec3 uMid;
+            uniform vec3 uHot;
+            varying vec3 vNormal;
+            varying vec3 vViewDir;
+            varying vec3 vLocal;
+            void main() {
+                vec3 n = normalize(vNormal);
+                vec3 v = normalize(vViewDir);
+                float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 2.2);
+                float t = uTime;
+                float band = sin(vLocal.y * 7.0 + vLocal.x * 4.0 + sin(vLocal.z * 6.0 - t * 2.4) * 1.8 + t * 3.0);
+                float swirl = 0.5 + 0.5 * sin(vLocal.z * 9.0 - t * 2.8 + band * 1.7);
+                float energy = clamp(0.5 + 0.5 * band * swirl, 0.0, 1.0);
+                vec3 col = mix(uDeep, uMid, 0.35 + energy * 0.65);
+                col = mix(col, uHot, fres * 0.5 + energy * 0.22 * uPower);
+                col += uHot * pow(fres, 3.0) * 0.55;
+                gl_FragColor = vec4(col, 1.0);
+            }
+        `;
+  var CURSED_SHELL_FRAG = `
+            uniform float uTime;
+            uniform float uFade;
+            uniform vec3 uInner;
+            uniform vec3 uOuter;
+            varying vec3 vNormal;
+            varying vec3 vViewDir;
+            varying vec3 vLocal;
+            void main() {
+                float ndv = abs(dot(normalize(vNormal), normalize(vViewDir)));
+                float fres = pow(1.0 - ndv, 2.5);
+                vec3 col = mix(uInner, uOuter, fres);
+                float pulse = 0.85 + 0.15 * sin(uTime * 7.0);
+                gl_FragColor = vec4(col, fres * 0.7 * uFade * pulse);
+            }
+        `;
+  var blueOrbAssets = null;
+  var redOrbAssets = null;
+  function buildCursedOrbAssets(deep, mid, hot, shellIn, shellOut, ringA, ringB) {
+    const motePositions = new Float32Array(10 * 3);
+    const moteGeo = new BufferGeometry();
+    moteGeo.setAttribute("position", new BufferAttribute(motePositions, 3));
+    return {
+      coreGeo: new SphereGeometry(0.62, 24, 18),
+      shellGeo: new SphereGeometry(0.95, 20, 14),
+      ringGeoA: new TorusGeometry(1.02, 0.03, 6, 40),
+      ringGeoB: new TorusGeometry(0.82, 0.024, 6, 36),
+      coreMat: new ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0 },
+          uPower: { value: 1 },
+          uDeep: { value: new Color(deep) },
+          uMid: { value: new Color(mid) },
+          uHot: { value: new Color(hot) }
+        },
+        vertexShader: HP_CORE_VERT,
+        fragmentShader: CURSED_CORE_FRAG
+      }),
+      shellMat: new ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0 },
+          uFade: { value: 1 },
+          uInner: { value: new Color(shellIn) },
+          uOuter: { value: new Color(shellOut) }
+        },
+        vertexShader: HP_CORE_VERT,
+        fragmentShader: CURSED_SHELL_FRAG,
+        transparent: true,
+        depthWrite: false,
+        blending: AdditiveBlending,
+        side: FrontSide
+      }),
+      ringMatA: new MeshBasicMaterial({ color: ringA, transparent: true, opacity: 0.85, blending: AdditiveBlending, depthWrite: false }),
+      ringMatB: new MeshBasicMaterial({ color: ringB, transparent: true, opacity: 0.65, blending: AdditiveBlending, depthWrite: false }),
+      moteGeo,
+      moteMat: new PointsMaterial({
+        size: 0.18,
+        map: getStarTexture(),
+        color: hot,
+        transparent: true,
+        opacity: 0.95,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        sizeAttenuation: true
+      }),
+      motePositions
+    };
+  }
+  function getBlueOrbAssets() {
+    if (!blueOrbAssets) blueOrbAssets = buildCursedOrbAssets(201774, 1331416, 6543615, 733048, 5622015, 3046399, 10479871);
+    return blueOrbAssets;
+  }
+  function getRedOrbAssets() {
+    if (!redOrbAssets) redOrbAssets = buildCursedOrbAssets(2359815, 11735583, 16739166, 7014162, 16751226, 16723781, 16756874);
+    return redOrbAssets;
+  }
+  function spawnCursedOrb(assets, kind, pos, dir, maxLife) {
+    const group = new Group();
+    group.position.copy(pos);
+    group.scale.setScalar(0.78);
+    const core = new Mesh(assets.coreGeo, assets.coreMat);
+    const shell = new Mesh(assets.shellGeo, assets.shellMat);
+    const ringA = new Mesh(assets.ringGeoA, assets.ringMatA);
+    ringA.rotation.x = Math.PI / 2;
+    const ringB = new Mesh(assets.ringGeoB, assets.ringMatB);
+    ringB.rotation.y = Math.PI / 2;
+    const motes = new Points(assets.moteGeo, assets.moteMat);
+    motes.frustumCulled = false;
+    group.add(core, shell, ringA, ringB, motes);
+    scene.add(group);
+    return {
+      kind,
+      group,
+      core,
+      shell,
+      ringA,
+      ringB,
+      motes,
+      pos: pos.clone(),
+      dir: dir.clone(),
+      life: 0,
+      maxLife
+    };
+  }
+  function animateCursedOrb(orb, delta) {
+    const assets = orb.kind === "blue" ? getBlueOrbAssets() : getRedOrbAssets();
+    assets.coreMat.uniforms.uTime.value = clock.elapsedTime;
+    assets.shellMat.uniforms.uTime.value = clock.elapsedTime;
+    orb.group.rotation.z += delta * 1.5;
+    orb.core.rotation.y += delta * 2.4;
+    orb.ringA.rotation.z += delta * 4.5;
+    orb.ringB.rotation.x += delta * 6.2;
+    for (let i = 0; i < 10; i++) {
+      const a = clock.elapsedTime * (2 + i * 0.08) + i * (Math.PI * 2 / 10);
+      const r = 1.03 + Math.sin(clock.elapsedTime * 3 + i) * 0.07;
+      assets.motePositions[i * 3] = Math.cos(a) * r;
+      assets.motePositions[i * 3 + 1] = Math.sin(a * 2.1 + i) * 0.38;
+      assets.motePositions[i * 3 + 2] = Math.sin(a) * r;
+    }
+    assets.moteGeo.attributes.position.needsUpdate = true;
+  }
   function castGojoBlue() {
     if (!playerEntity) return;
     if (gojoTimers.blue > 0) {
@@ -28922,34 +29305,19 @@
       showFloatText("BLUE ALREADY ACTIVE", "#7dd3fc");
       return;
     }
-    const target = gojoNearestTarget(70);
+    const target = gojoNearestTarget(110);
     if (!target) {
       sfx("deny");
       showFloatText("NO TARGET IN RANGE", "#7dd3fc");
       return;
     }
     gojoTimers.blue = 7;
-    const g = new Group();
-    g.add(new Mesh(
-      new SphereGeometry(1.15, 16, 16),
-      new MeshBasicMaterial({ color: 3046399, transparent: true, opacity: 0.32, blending: AdditiveBlending, depthWrite: false })
-    ));
-    g.add(new Mesh(
-      new SphereGeometry(0.34, 12, 12),
-      new MeshBasicMaterial({ color: 14478335 })
-    ));
-    const ring = new Mesh(
-      new TorusGeometry(1.8, 0.05, 6, 40),
-      new MeshBasicMaterial({ color: 6990335, transparent: true, opacity: 0.8, blending: AdditiveBlending, depthWrite: false })
-    );
-    ring.rotation.x = Math.PI / 2;
-    g.add(ring);
     const pos = target.position.clone().setY(2.8 * target.scale);
-    g.position.copy(pos);
-    scene.add(g);
-    gojoBlueOrb = { mesh: g, pos, life: 1.8 };
+    gojoBlueOrb = spawnCursedOrb(getBlueOrbAssets(), "blue", pos, new Vector3(0, 0, -1), 2.2);
+    gojoBlueOrb.group.scale.setScalar(1.35);
+    spawnHollowPurpleRing(pos, 3046399, 30, 0.45, true);
     showFloatText("CURSED TECHNIQUE \u2014 BLUE", "#6aa9ff");
-    sfx("hit");
+    sfx("beam");
   }
   function castGojoRed() {
     if (!playerEntity) return;
@@ -28958,32 +29326,64 @@
       showFloatText(`RED RECHARGING \u2014 ${Math.ceil(gojoTimers.red)}s`, "#ff8a96");
       return;
     }
-    const p = playerEntity.position;
-    const inRange = enemyEntities.filter((e) => e.position.distanceTo(p) < 30);
-    if (!inRange.length) {
-      sfx("deny");
-      showFloatText("NO HOSTILES IN RANGE", "#ff8a96");
-      return;
-    }
+    if (gojoRedOrb) return;
     gojoTimers.red = 7;
-    for (const e of inRange) {
-      const dir = e.position.clone().sub(p).setY(0).normalize();
-      e.position.addScaledVector(dir, 16);
-      applyDamageToEntity(e, 1400, e.position.clone().setY(2.4), "normal", true);
-      spawnDamageNumber(1400, e.position.clone().setY(3.6), "normal");
-    }
-    const ring = new Mesh(
-      new TorusGeometry(1.3, 0.2, 8, 48),
-      new MeshBasicMaterial({ color: 16723781, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false })
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(p.x, 0.6, p.z);
-    scene.add(ring);
-    particles.push({ mesh: ring, ring: true, vel: new Vector3(), life: 0.55, maxLife: 0.55, ringGrow: 44 });
-    spawnExplosionParticles(p.clone().setY(3), 16734822, 22, 26);
-    sfx("bigexplode");
-    cameraShake = Math.max(cameraShake, 0.5);
+    const target = gojoNearestTarget(120);
+    const eye = playerEntity.position.clone().setY(4.95);
+    const aim = target ? target.position.clone().setY(2.6 * target.scale) : getAimPoint();
+    const dir = aim.sub(eye);
+    if (dir.lengthSq() < 0.01) dir.set(0, 0, -1);
+    dir.normalize();
+    const spawn = eye.clone().addScaledVector(dir, firstPersonView ? 4.6 : 3.4);
+    gojoRedOrb = spawnCursedOrb(getRedOrbAssets(), "red", spawn, dir, 1.5);
+    gojoRedOrb.group.scale.setScalar(1);
     showFloatText("CURSED TECHNIQUE \u2014 RED", "#ff5a66");
+    sfx("beam");
+  }
+  function detonateGojoRed() {
+    if (!gojoRedOrb) return;
+    const orb = gojoRedOrb;
+    const pos = orb.pos.clone();
+    scene.remove(orb.group);
+    gojoRedOrb = null;
+    for (const e of [...enemyEntities]) {
+      const d = e.position.distanceTo(pos);
+      if (d >= 30) continue;
+      const dmg = 1600 * (1 - d / 30 * 0.55);
+      const push = e.position.clone().sub(pos).setY(0);
+      if (push.lengthSq() < 0.01) push.set(1, 0, 0);
+      push.normalize().multiplyScalar(18 * (1 - d / 34));
+      e.position.add(push);
+      applyDamageToEntity(e, dmg, e.position.clone().setY(2.4), "normal", true);
+      spawnDamageNumber(Math.ceil(dmg), e.position.clone().setY(3.7), "normal");
+      e.stun = Math.max(e.stun || 0, 0.35);
+    }
+    const nearCockpit = firstPersonView && pos.distanceTo(camera.position) < 32;
+    if (!nearCockpit) {
+      const assets = getRedOrbAssets();
+      const shock = new Mesh(
+        assets.coreGeo,
+        new MeshBasicMaterial({ color: 16724804, wireframe: true, transparent: true, opacity: 0.6, blending: AdditiveBlending, depthWrite: false })
+      );
+      shock.position.copy(pos);
+      scene.add(shock);
+      particles.push({ mesh: shock, vel: new Vector3(), life: 0.42, maxLife: 0.42, scaleRate: 28, fade: true });
+      const flash = new Mesh(
+        assets.shellGeo,
+        new MeshBasicMaterial({ color: 16747114, transparent: true, opacity: 0.45, blending: AdditiveBlending, depthWrite: false })
+      );
+      flash.position.copy(pos);
+      scene.add(flash);
+      particles.push({ mesh: flash, vel: new Vector3(), life: 0.24, maxLife: 0.24, scaleRate: 14, fade: true });
+      spawnHollowPurpleRing(pos, 16723781, 58, 0.55);
+      spawnHollowPurpleRing(pos, 16756874, 42, 0.45, true);
+      spawnExplosionParticles(pos, 16731469, 18, 30);
+      spawnExplosionParticles(pos, 16756736, 8, 22);
+      cameraShake = Math.max(cameraShake, 0.8);
+      gojoBloom = Math.max(gojoBloom, 0.42);
+    }
+    sfx("bigexplode");
+    showFloatText("RED \u2014 REPULSION SHOCKWAVE", "#ffb08a");
   }
   function createVoidStarfield(center) {
     const count = 900;
@@ -29048,19 +29448,152 @@
     scene.add(arcs);
     return { arcs, arcMat };
   }
+  function createVoidGalaxy(center) {
+    const count = 1500;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const arm = i % 3;
+      const r = Math.pow(Math.random(), 0.62) * 20;
+      const angle = arm * (Math.PI * 2 / 3) + r * 0.2 + (Math.random() - 0.5) * (0.32 + r * 0.024);
+      positions[i * 3] = Math.cos(angle) * r;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * (1.1 + r * 0.04);
+      positions[i * 3 + 2] = Math.sin(angle) * r;
+      const shade = 0.5 + 0.5 * (1 - r / 20);
+      const pink = i % 9 === 0;
+      colors[i * 3] = pink ? 0.92 : 0.42 * shade;
+      colors[i * 3 + 1] = pink ? 0.38 : 0.3 * shade;
+      colors[i * 3 + 2] = pink ? 0.82 : 0.62 + 0.38 * shade;
+    }
+    const geo = new BufferGeometry();
+    geo.setAttribute("position", new BufferAttribute(positions, 3));
+    geo.setAttribute("color", new BufferAttribute(colors, 3));
+    const galaxyMat = new PointsMaterial({
+      size: 0.68,
+      map: getStarTexture(),
+      vertexColors: true,
+      transparent: true,
+      opacity: 0,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+      fog: false
+    });
+    const centroid = center.clone().add(new Vector3(-6, 14, -34));
+    const galaxy = new Points(geo, galaxyMat);
+    galaxy.position.copy(centroid);
+    galaxy.rotation.set(-0.3, 0.35, 0.16);
+    scene.add(galaxy);
+    const galaxyCoreMat = new SpriteMaterial({
+      map: getGlowTexture(),
+      color: 9133302,
+      transparent: true,
+      opacity: 0,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      fog: false
+    });
+    const galaxyCore = new Sprite(galaxyCoreMat);
+    galaxyCore.position.copy(centroid);
+    galaxyCore.scale.set(10, 10, 1);
+    scene.add(galaxyCore);
+    return { galaxy, galaxyMat, galaxyCore, galaxyCoreMat };
+  }
+  function createVoidBlackHole(center) {
+    const group = new Group();
+    group.position.copy(center).add(new Vector3(7, 15, -33));
+    scene.add(group);
+    const horizon = new Mesh(
+      new SphereGeometry(5.4, 24, 18),
+      new MeshBasicMaterial({ color: 0, fog: false })
+    );
+    group.add(horizon);
+    const cosmosMats = [];
+    const addDisk = (radius, tube, color, opacity, tiltX, tiltZ) => {
+      const mat = new MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        side: DoubleSide,
+        fog: false
+      });
+      mat.userData.baseOpacity = opacity;
+      cosmosMats.push(mat);
+      const disk = new Mesh(new TorusGeometry(radius, tube, 8, 64), mat);
+      disk.rotation.set(tiltX, 0, tiltZ);
+      group.add(disk);
+      return disk;
+    };
+    const diskA = addDisk(6.5, 0.28, 16742959, 0.42, 1.15, 0.18);
+    const diskB = addDisk(7.2, 0.08, 8141549, 0.24, 1, -0.3);
+    const photon = addDisk(5.8, 0.035, 10312959, 0.22, 1.22, 0.1);
+    const moteCount = 140;
+    const motePositions = new Float32Array(moteCount * 3);
+    const moteColors = new Float32Array(moteCount * 3);
+    for (let i = 0; i < moteCount; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 5.7 + Math.random() * 1.6;
+      motePositions[i * 3] = Math.cos(a) * r;
+      motePositions[i * 3 + 1] = (Math.random() - 0.5) * 1.1;
+      motePositions[i * 3 + 2] = Math.sin(a) * r;
+      const warm = Math.random() < 0.65;
+      moteColors[i * 3] = warm ? 1 : 0.72;
+      moteColors[i * 3 + 1] = warm ? 0.52 : 0.3;
+      moteColors[i * 3 + 2] = warm ? 0.22 : 1;
+    }
+    const moteGeo = new BufferGeometry();
+    moteGeo.setAttribute("position", new BufferAttribute(motePositions, 3));
+    moteGeo.setAttribute("color", new BufferAttribute(moteColors, 3));
+    const bhMoteMat = new PointsMaterial({
+      size: 0.2,
+      map: getStarTexture(),
+      vertexColors: true,
+      transparent: true,
+      opacity: 0,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+      fog: false
+    });
+    bhMoteMat.userData.baseOpacity = 0.5;
+    cosmosMats.push(bhMoteMat);
+    const bhMotes = new Points(moteGeo, bhMoteMat);
+    bhMotes.rotation.x = 1.15;
+    group.add(bhMotes);
+    return { blackHole: group, bhDisks: [diskA, diskB, photon], bhMotes, bhMoteMat, cosmosMats };
+  }
   function destroyGojoDomain() {
     if (!gojoDomain) return;
     const dome = gojoDomain;
     scene.remove(dome.mesh);
     disposeObject3D(dome.mesh);
-    scene.remove(dome.core);
-    disposeObject3D(dome.core);
     scene.remove(dome.stars);
     dome.stars.geometry.dispose();
     dome.starMat.dispose();
     scene.remove(dome.arcs);
     dome.arcs.geometry.dispose();
     dome.arcMat.dispose();
+    scene.remove(dome.galaxy);
+    dome.galaxy.geometry.dispose();
+    dome.galaxyMat.dispose();
+    scene.remove(dome.galaxyCore);
+    dome.galaxyCoreMat.dispose();
+    scene.remove(dome.blackHole);
+    disposeObject3D(dome.blackHole);
+    if (dome.env) dome.env.visible = true;
+    if (arenaDust) arenaDust.visible = dome.prevDustVisible;
+    if (dome.prevBg) scene.background = dome.prevBg;
+    else {
+      const theme = getArenaDef();
+      scene.background = new Color(theme.fog);
+    }
+    if (dome.prevFog) scene.fog = dome.prevFog;
+    else {
+      const theme = getArenaDef();
+      scene.fog = new FogExp2(theme.fog, theme.fogD);
+    }
     gojoDomain = null;
     const overlay = byId("domain-overlay");
     if (overlay) overlay.classList.remove("active");
@@ -29074,36 +29607,52 @@
     }
     if (gojoDomain) return;
     const p = playerEntity.position;
-    const inRange = enemyEntities.filter((e) => e.position.distanceTo(p) < 60);
-    if (!inRange.length) {
-      sfx("deny");
-      showFloatText("NO HOSTILES IN DOMAIN RANGE", "#c9a2ff");
-      return;
-    }
+    const inRange = enemyEntities.filter((e) => e.position.distanceTo(p) < 80);
     gojoTimers.domain = 20;
     const center = p.clone().setY(4);
+    const env = scene.getObjectByName("arena_env");
+    const prevBg = scene.background instanceof Color ? scene.background.clone() : null;
+    const prevFog = scene.fog ? scene.fog.clone() : null;
+    const prevDustVisible = arenaDust ? arenaDust.visible : true;
+    if (env) env.visible = false;
+    if (arenaDust) arenaDust.visible = false;
+    scene.background = new Color(65542);
+    scene.fog = null;
     const g = new Group();
     g.position.copy(center);
-    const shell = new Mesh(
-      new SphereGeometry(1, 48, 32),
+    const shellMat = new MeshBasicMaterial({
+      color: 65542,
+      transparent: true,
+      opacity: 1,
+      side: BackSide,
+      depthWrite: true,
+      fog: false
+    });
+    g.add(new Mesh(new SphereGeometry(1, 48, 32), shellMat));
+    const wire = new Mesh(
+      new SphereGeometry(0.997, 24, 16),
       new MeshBasicMaterial({
-        color: 262154,
+        color: 7153881,
+        wireframe: true,
         transparent: true,
-        opacity: 0.6,
+        opacity: 0.08,
         side: BackSide,
-        depthWrite: false
+        blending: AdditiveBlending,
+        depthWrite: false,
+        fog: false
       })
     );
-    g.add(shell);
+    g.add(wire);
     const innerShell = new Mesh(
       new SphereGeometry(1.004, 42, 28),
       new MeshBasicMaterial({
         color: 2820941,
         transparent: true,
-        opacity: 0.22,
+        opacity: 0.1,
         side: BackSide,
         blending: AdditiveBlending,
-        depthWrite: false
+        depthWrite: false,
+        fog: false
       })
     );
     g.add(innerShell);
@@ -29112,11 +29661,12 @@
       const ring = new Mesh(
         new TorusGeometry(0.52 + Math.random() * 0.44, 4e-3 + Math.random() * 0.01, 6, 110),
         new MeshBasicMaterial({
-          color: i % 3 === 0 ? 15984895 : i % 2 === 0 ? 12616956 : 9133302,
+          color: i % 2 === 0 ? 12616956 : 9133302,
           transparent: true,
-          opacity: 0.3 + Math.random() * 0.35,
+          opacity: 0.28 + Math.random() * 0.3,
           blending: AdditiveBlending,
-          depthWrite: false
+          depthWrite: false,
+          fog: false
         })
       );
       ring.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
@@ -29142,7 +29692,7 @@
     g.add(new LineSegments(streamGeo, new LineBasicMaterial({
       color: 11032055,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.2,
       blending: AdditiveBlending,
       depthWrite: false
     })));
@@ -29152,7 +29702,7 @@
         new MeshBasicMaterial({
           color: i % 2 ? 14202110 : 9133302,
           transparent: true,
-          opacity: 0.7,
+          opacity: 0.65,
           blending: AdditiveBlending,
           depthWrite: false
         })
@@ -29168,36 +29718,43 @@
       shard.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
       g.add(shard);
     }
+    g.scale.setScalar(6);
     scene.add(g);
-    const core = new Group();
-    core.position.copy(center);
-    core.add(new Mesh(
-      new SphereGeometry(1.15, 24, 24),
-      new MeshBasicMaterial({ color: 16115967 })
-    ));
-    const coreHalo = new Sprite(new SpriteMaterial({
-      map: getGlowTexture(),
-      color: 12616956,
-      transparent: true,
-      opacity: 0.95,
-      blending: AdditiveBlending,
-      depthWrite: false
-    }));
-    coreHalo.scale.set(14, 14, 1);
-    core.add(coreHalo);
-    core.add(new PointLight(11032055, 6, 140));
-    scene.add(core);
     const { stars, starMat } = createVoidStarfield(center);
     const { arcs, arcMat } = createVoidArcs(center);
-    gojoDomain = { mesh: g, life: 3.2, stars, starMat, arcs, arcMat, core, rings };
-    for (const e of inRange) e.stun = Math.max(e.stun || 0, 2.8);
+    const { galaxy, galaxyMat, galaxyCore, galaxyCoreMat } = createVoidGalaxy(center);
+    const { blackHole, bhDisks, bhMotes, bhMoteMat, cosmosMats } = createVoidBlackHole(center);
+    gojoDomain = {
+      mesh: g,
+      life: 6,
+      shellMat,
+      stars,
+      starMat,
+      arcs,
+      arcMat,
+      rings,
+      galaxy,
+      galaxyMat,
+      galaxyCore,
+      galaxyCoreMat,
+      blackHole,
+      bhDisks,
+      bhMotes,
+      bhMoteMat,
+      cosmosMats,
+      env: env || null,
+      prevBg,
+      prevFog,
+      prevDustVisible
+    };
+    for (const e of inRange) e.stun = Math.max(e.stun || 0, 5.2);
     const overlay = byId("domain-overlay");
     if (overlay) overlay.classList.add("active");
     for (let i = 0; i < 3; i++) {
       const ring = new Mesh(
         new RingGeometry(0.7, 1.1, 72),
         new MeshBasicMaterial({
-          color: i === 0 ? 15984895 : 11032055,
+          color: i === 0 ? 12616956 : 9133302,
           transparent: true,
           opacity: 0.9,
           side: DoubleSide,
@@ -29213,7 +29770,7 @@
     showFloatText("DOMAIN EXPANSION \u2014 UNLIMITED VOID", "#c9a2ff");
     sfx("bigexplode");
     cameraShake = Math.max(cameraShake, 0.9);
-    gojoBloom = Math.max(gojoBloom, 2.6);
+    gojoBloom = Math.max(gojoBloom, 1.1);
   }
   function toggleGojoInfinity() {
     gojoInfinityOn = !gojoInfinityOn;
@@ -29229,11 +29786,11 @@
       root.classList.toggle("off", off);
       root.classList.toggle("firing", firing);
     };
-    set("blue", gojoTimers.blue > 0 ? `${Math.ceil(gojoTimers.blue)}s` : "READY", gojoTimers.blue > 0);
-    set("red", gojoTimers.red > 0 ? `${Math.ceil(gojoTimers.red)}s` : "READY", gojoTimers.red > 0);
+    set("blue", gojoBlueOrb ? "ACTIVE" : gojoTimers.blue > 0 ? `${Math.ceil(gojoTimers.blue)}s` : "READY", gojoTimers.blue > 0, false, !!gojoBlueOrb);
+    set("red", gojoRedOrb ? "FLY" : gojoTimers.red > 0 ? `${Math.ceil(gojoTimers.red)}s` : "READY", gojoTimers.red > 0, false, !!gojoRedOrb);
     set("purple", gojoPurple ? gojoPurple.state === "merge" ? "MERGE" : "FLY" : gojoTimers.purple > 0 ? `${Math.ceil(gojoTimers.purple)}s` : "READY", gojoTimers.purple > 0, false, !!gojoPurple);
     set("limitless", gojoInfinityOn ? "ON" : "OFF", false, !gojoInfinityOn);
-    set("domain", gojoTimers.domain > 0 ? `${Math.ceil(gojoTimers.domain)}s` : "READY", gojoTimers.domain > 0);
+    set("domain", gojoDomain ? "VOID" : gojoTimers.domain > 0 ? `${Math.ceil(gojoTimers.domain)}s` : "READY", gojoTimers.domain > 0, false, !!gojoDomain);
   }
   function updateGojoTechniques(delta) {
     if (!playerEntity) return;
@@ -29246,9 +29803,14 @@
     updateGojoPurple(delta);
     if (gojoBlueOrb) {
       const orb = gojoBlueOrb;
-      orb.life -= delta;
-      orb.mesh.rotation.y += delta * 5;
-      orb.mesh.scale.setScalar(1 + Math.sin(clock.elapsedTime * 18) * 0.12);
+      orb.life += delta;
+      animateCursedOrb(orb, delta);
+      const assets = getBlueOrbAssets();
+      const fade = Math.min(1, Math.max(0, (orb.maxLife - orb.life) / 0.45));
+      assets.shellMat.uniforms.uFade.value = fade;
+      assets.ringMatA.opacity = 0.85 * fade;
+      assets.ringMatB.opacity = 0.65 * fade;
+      orb.group.scale.setScalar((0.95 + Math.sin(clock.elapsedTime * 6) * 0.04) * (0.82 + 0.18 * fade));
       for (const e of [...enemyEntities]) {
         const d = e.position.distanceTo(orb.pos);
         if (d < 22) {
@@ -29257,19 +29819,76 @@
           applyDamageToEntity(e, 110 * delta, e.position.clone().setY(2.2), "normal", true);
         }
       }
-      if (orb.life <= 0) {
-        scene.remove(orb.mesh);
-        disposeObject3D(orb.mesh);
+      if (orb.life >= orb.maxLife) {
+        scene.remove(orb.group);
+        spawnHollowPurpleRing(orb.pos, 3046399, 30, 0.45, true);
         gojoBlueOrb = null;
       }
+    }
+    if (gojoRedOrb) {
+      const orb = gojoRedOrb;
+      orb.life += delta;
+      const prev = orb.pos.clone();
+      orb.pos.addScaledVector(orb.dir, 150 * delta);
+      animateCursedOrb(orb, delta);
+      let hit = false;
+      let contact = null;
+      const sx = orb.pos.x - prev.x;
+      const sy = orb.pos.y - prev.y;
+      const sz = orb.pos.z - prev.z;
+      const lenSq = sx * sx + sy * sy + sz * sz;
+      if (orb.life > 0.04 && lenSq > 1e-4) {
+        let bestT = 2;
+        for (const e of enemyEntities) {
+          const ex = e.position.x - prev.x;
+          const ey = 2.7 * e.scale - prev.y;
+          const ez = e.position.z - prev.z;
+          const t = MathUtils.clamp((ex * sx + ey * sy + ez * sz) / lenSq, 0, 1);
+          const dx = ex - sx * t, dy = ey - sy * t, dz = ez - sz * t;
+          const rr = e.radius + 1.7;
+          if (dx * dx + dy * dy + dz * dz < rr * rr && t < bestT) {
+            bestT = t;
+            hit = true;
+            contact = prev.clone().addScaledVector(orb.dir, 150 * delta * t);
+          }
+        }
+        if (!hit) {
+          const steps = Math.max(2, Math.min(16, Math.ceil(Math.sqrt(lenSq) / 4)));
+          for (let st = 1; st <= steps && !hit; st++) {
+            const t = st / steps;
+            const px2 = prev.x + sx * t, py2 = prev.y + sy * t, pz2 = prev.z + sz * t;
+            for (const obs of arenaObstacles) {
+              if (Math.abs(px2 - obs.pos.x) < obs.halfSize + 1.5 && Math.abs(pz2 - obs.pos.z) < obs.halfSize + 1.5) {
+                hit = true;
+                contact = new Vector3(px2, py2, pz2);
+                break;
+              }
+            }
+          }
+        }
+        if (!hit && orb.pos.y < 0.9 && prev.y >= 0.9) {
+          const t = (0.9 - prev.y) / (orb.pos.y - prev.y);
+          hit = true;
+          contact = prev.clone().addScaledVector(orb.dir, 150 * delta * t);
+        }
+        if (!hit && orb.pos.y < 0.9) {
+          hit = true;
+          contact = orb.pos.clone();
+        }
+      }
+      if (contact) {
+        orb.pos.copy(contact);
+      }
+      orb.group.position.copy(orb.pos);
+      if (hit || orb.life >= orb.maxLife) detonateGojoRed();
     }
     if (gojoDomain) {
       const dome = gojoDomain;
       dome.life -= delta;
-      const elapsed = 3.2 - dome.life;
-      const radius = Math.min(62, 8 + elapsed * 18);
-      dome.mesh.scale.setScalar(radius);
-      dome.mesh.rotation.y += delta * 0.3;
+      const elapsed = 6 - dome.life;
+      const radius = Math.min(62, 6 + elapsed * 70);
+      dome.mesh.scale.setScalar(Math.max(0.01, radius));
+      dome.mesh.rotation.y += delta * 0.18;
       dome.rings.forEach((ring, i) => {
         ring.rotation.x += delta * (0.22 + i * 0.05);
         ring.rotation.z += delta * (0.16 + i * 0.04);
@@ -29277,12 +29896,40 @@
       dome.stars.rotation.y += delta * 0.07;
       dome.stars.rotation.x += delta * 0.02;
       dome.arcs.rotation.y -= delta * 0.22;
-      const fade = Math.min(1, elapsed / 0.3) * Math.min(1, Math.max(0, dome.life) / 0.45);
+      dome.galaxy.rotation.y += delta * 0.035;
+      dome.galaxy.rotation.z += delta * 6e-3;
+      dome.blackHole.rotation.y += delta * 0.12;
+      dome.bhDisks.forEach((disk, i) => {
+        disk.rotation.z += delta * (0.5 + i * 0.18);
+      });
+      dome.bhMotes.rotation.z += delta * 0.4;
+      const fade = Math.min(1, elapsed / 0.55) * Math.min(1, Math.max(0, dome.life) / 0.7);
       dome.starMat.opacity = 0.9 * fade;
       dome.arcMat.opacity = (0.35 + Math.abs(Math.sin(clock.elapsedTime * 24)) * 0.5) * fade;
-      const pulse = 1 + Math.sin(clock.elapsedTime * 9) * 0.16;
-      dome.core.scale.setScalar(pulse);
-      gojoBloom = Math.max(gojoBloom, 0.9 * fade);
+      dome.galaxyMat.opacity = 0.95 * fade;
+      dome.galaxyCoreMat.opacity = 0.3 * fade;
+      dome.bhMoteMat.opacity = 0.85 * fade;
+      for (const mat of dome.cosmosMats) {
+        const base = mat.userData.baseOpacity ?? 1;
+        mat.opacity = base * fade;
+      }
+      dome.shellMat.opacity = Math.min(1, Math.max(0, dome.life) / 0.45);
+      gojoBloom = Math.max(gojoBloom, 0.15 * fade);
+      if (elapsed > 0.6) {
+        const c = dome.mesh.position;
+        const limit = radius - 2.5;
+        const clampBody = (obj) => {
+          const dx = obj.position.x - c.x;
+          const dz = obj.position.z - c.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist > limit && dist > 1e-3) {
+            obj.position.x = c.x + dx / dist * limit;
+            obj.position.z = c.z + dz / dist * limit;
+          }
+        };
+        if (playerEntity) clampBody(playerEntity);
+        for (const e of enemyEntities) clampBody(e);
+      }
       for (const e of [...enemyEntities]) {
         if (e.position.distanceTo(p) < radius) {
           applyDamageToEntity(e, 420 * delta, e.position.clone().setY(2.2), "normal", true);
@@ -29290,7 +29937,7 @@
         }
       }
       if (dome.life <= 0) {
-        gojoBloom = Math.max(gojoBloom, 1.4);
+        gojoBloom = Math.max(gojoBloom, 0.9);
         destroyGojoDomain();
       }
     }
