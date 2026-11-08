@@ -25861,7 +25861,7 @@
   var frierenBeam = null;
   var frierenFrontShield = null;
   var frierenSphereShield = null;
-  var frierenTimers = { zoltraak: 0, shield: 0, sphere: 0, catastravia: 0, rapidZoltraak: 0, judradjim: 0 };
+  var frierenTimers = { zoltraak: 0, shield: 0, sphere: 0, catastravia: 0, rapidZoltraak: 0, judradjim: 0, vollzanbel: 0 };
   var frierenRapidMode = null;
   var judradjimBolts = [];
   var frierenRapidNextShot = 0;
@@ -25937,6 +25937,10 @@
           const n = TECH_NODES.find((x) => x.id === t.id);
           if (n) n.unlocked = !!t.unlocked;
         });
+      }
+      if (TECH_NODES.find((t) => t.id === "tech_4" && t.unlocked)) {
+        const magic = PARTS_DB.arms.find((p) => p.id === "magic_blaster_arms");
+        if (magic) magic.unlocked = true;
       }
       return true;
     } catch (e) {
@@ -26069,6 +26073,15 @@
         noise(0.5, 0.3, 5200);
         tone(120, 0.45, "sawtooth", 0.16, 38);
         tone(980, 0.22, "square", 0.05, 140);
+        break;
+      case "vollzanbel":
+        noise(0.7, 0.45, 900);
+        tone(92, 0.55, "sawtooth", 0.22, 34);
+        tone(360, 0.3, "triangle", 0.08, 120);
+        break;
+      case "arcanebolt":
+        tone(1320, 0.08, "sawtooth", 0.06, 620);
+        noise(0.12, 0.12, 5e3);
         break;
       case "shield":
         tone(520, 0.22, "triangle", 0.09, 880);
@@ -26229,7 +26242,8 @@
     plasma_arms: { id: "plasma_arms", label: "TWIN PLASMA", kind: "plasma", sfx: "plasma", interval: 0.42, damageMult: 0.64, speed: 135, range: 90, color: 6750156, size: 0.42, trail: true, recoil: 0.3, splashRadius: 3.5 },
     grenade_arms: { id: "grenade_arms", label: "ARC MORTARS", kind: "grenade", sfx: "cannon", interval: 0.34, damageMult: 0.42, speed: 100, range: 100, color: 16753229, size: 0.3, trail: true, recoil: 0.38, splashRadius: 7 },
     beamer_arms: { id: "beamer_arms", label: "HELIOS BEAM", kind: "beam", sfx: "beam", interval: 0.1, damageMult: 0.25, speed: 0, range: 110, color: 9369343, size: 0.22, trail: false, recoil: 0.1 },
-    railgun_arms: { id: "railgun_arms", label: "MAG RAILGUNS", kind: "rail", sfx: "rail", interval: 1, damageMult: 0.61, speed: 330, range: 150, color: 16777215, size: 0.2, trail: true, recoil: 0.6 }
+    railgun_arms: { id: "railgun_arms", label: "MAG RAILGUNS", kind: "rail", sfx: "rail", interval: 1, damageMult: 0.61, speed: 330, range: 150, color: 16777215, size: 0.2, trail: true, recoil: 0.6 },
+    magic_blaster_arms: { id: "magic_blaster_arms", label: "MAGIC BLASTERS", kind: "lightning", sfx: "arcanebolt", interval: 0.28, damageMult: 1, speed: 0, range: 135, color: 11889663, size: 0.3, trail: true, recoil: 0.18 }
   };
   var ARENA_DEFS = {
     foundry: {
@@ -26296,12 +26310,28 @@
   function getWeaponProfile() {
     return WEAPON_PROFILES[GAME_STATE.equipped.arms] || WEAPON_PROFILES.cannon_arms;
   }
+  function currentCallsign() {
+    return (GAME_STATE.username || "").trim().toLowerCase();
+  }
   function isGojo() {
-    return (GAME_STATE.username || "").trim().toLowerCase() === "gojo";
+    return currentCallsign() === "gojo";
+  }
+  function isStern() {
+    return currentCallsign() === "stern";
   }
   function isFrieren() {
-    const callsign = (GAME_STATE.username || "").trim().toLowerCase();
-    return callsign === "frieren" || callsign === "fern" || callsign === "denken";
+    const callsign = currentCallsign();
+    return callsign === "frieren" || callsign === "fern" || callsign === "denken" || callsign === "stern";
+  }
+  function frierenSpellMultiplier(kind) {
+    const callsign = currentCallsign();
+    if (kind === "judradjim" && callsign === "frieren") return 2;
+    if (kind === "catastravia" && callsign === "denken") return 3;
+    if ((kind === "zoltraak" || kind === "rapidZoltraak") && callsign === "fern") return 2;
+    return 1;
+  }
+  function arcaneSecretHint() {
+    return "Secret mage callsigns: FRIEREN, FERN, DENKEN, and STERN.";
   }
   function getBeamHeatMult() {
     const core = PARTS_DB.core.find((p) => p.id === GAME_STATE.equipped.core);
@@ -26914,7 +26944,8 @@
       { id: "plasma_arms", name: "Twin Plasma Emitters", damage: 560, heatRate: 23, range: 90, cost: 2800, unlocked: false, desc: "Slow heavy plasma orbs that splash on impact and chew through shields." },
       { id: "grenade_arms", name: "Arc Mortar Pods", damage: 700, heatRate: 17, range: 100, cost: 4200, unlocked: false, desc: "Lobbed arcing shells that detonate with wide shrapnel blasts. Rewards prediction." },
       { id: "beamer_arms", name: "Helios Beam Cannons", damage: 900, heatRate: 75, range: 110, cost: 5200, unlocked: false, desc: "Continuous prismatic lance. Highest damage output of any arm in the Forge, but heat gain is brutal without reactor cooling investment. Arctic air vents an extra 20%." },
-      { id: "railgun_arms", name: "Linear Magnetic Railguns", damage: 1150, heatRate: 57, range: 150, cost: 5500, unlocked: false, desc: "Long-range kinetic slugs that pierce up to three hulls. Heavy recoil, heavy heat." }
+      { id: "railgun_arms", name: "Linear Magnetic Railguns", damage: 1150, heatRate: 57, range: 150, cost: 5500, unlocked: false, desc: "Long-range kinetic slugs that pierce up to three hulls. Heavy recoil, heavy heat." },
+      { id: "magic_blaster_arms", name: "Magic Blasters", damage: 820, heatRate: 16, range: 135, cost: 4500, unlocked: false, requiresTech: "tech_4", desc: "Arcane sidearms that channel raw lightning. Normal pilots only cast the basic bolt. Old records name four mage callsigns who unlock the full spell matrix: FRIEREN, FERN, DENKEN, and STERN." }
     ],
     legs: [
       { id: "walker_legs", name: "Bipedal Piston Hydraulics", hp: 500, speed: 55, cost: 0, unlocked: true, desc: "Articulated mechanical bipedal legs with knee shock absorbers." },
@@ -26941,7 +26972,8 @@
   var TECH_NODES = [
     { id: "tech_1", name: "Cryo Injectors", category: "Cooling", cost: 150, unlocked: false, desc: "+25% faster heat sink recovery rate." },
     { id: "tech_2", name: "Overcharged Capacitors", category: "Shields", cost: 250, unlocked: false, desc: "+30% faster shield regeneration rate." },
-    { id: "tech_3", name: "High-Velocity Acceleration", category: "Weapons", cost: 400, unlocked: false, desc: "+20% projectile speed and kinetic damage." }
+    { id: "tech_3", name: "High-Velocity Acceleration", category: "Weapons", cost: 400, unlocked: false, desc: "+20% projectile speed and kinetic damage." },
+    { id: "tech_4", name: "Arcane Blaster Coupling", category: "Weapons", cost: 700, unlocked: false, desc: "Fits Magic Blasters to the Forge's arms catalog. Non-mage pilots can only cast basic lightning. Secret mage callsigns \u2014 FRIEREN, FERN, DENKEN, STERN \u2014 unlock the full Arcane Spell Matrix." }
   ];
   var GOJO_TECHNIQUES = [
     { id: "tech_blue", name: "Cursed Technique: Blue", desc: "Key 1 \u2014 a blue gravity orb that drags hostiles into a collapsing point.", color: 3046399 },
@@ -26952,12 +26984,13 @@
   ];
   var GOJO_STATS = { hp: 14e3, shield: 8e3, energy: 600, speed: 110, heatCool: 120, damage: 4500 };
   var FRIEREN_TECHNIQUES = [
-    { id: "spell_zoltraak", name: "Zoltraak", desc: "Key 1 or LMB \u2014 a piercing white annihilation beam that tears through everything in its path.", color: 16120831 },
-    { id: "spell_hex_shield", name: "Hex Shield", desc: "Key 2 \u2014 raise a forward wall of translucent blue hexagons that absorbs incoming fire.", color: 5556479 },
-    { id: "spell_sphere_shield", name: "Spherical Hex Shield", desc: "Key 3 \u2014 seal yourself inside a rotating sphere of blue hexagons and blunt all damage.", color: 2989311 },
-    { id: "spell_catastravia", name: "Catastravia", desc: "Key 4 (hold) \u2014 rapid-fire golden star beams that shred a single target.", color: 16765770 },
-    { id: "spell_rapid_zoltraak", name: "Rapid Zoltraak", desc: "Key 5 (hold) \u2014 a quick stream of weaker white beams that still pierces everything in line.", color: 16777215 },
-    { id: "spell_judradjim", name: "Judradjim", desc: "Key 6 \u2014 call down purple lightning that arcs through nearby enemies.", color: 11032055 }
+    { id: "spell_zoltraak", name: "Zoltraak", desc: "Key 1 or LMB \u2014 a piercing white annihilation beam. Fern doubles its output.", color: 16120831 },
+    { id: "spell_hex_shield", name: "Hex Shield", desc: "Key 2 \u2014 raise a forward wall of translucent hexagons. Stern tints the barrier amber.", color: 5556479 },
+    { id: "spell_sphere_shield", name: "Spherical Hex Shield", desc: "Key 3 \u2014 seal yourself inside a rotating hex sphere. Stern tints the barrier amber.", color: 2989311 },
+    { id: "spell_catastravia", name: "Catastravia", desc: "Key 4 (hold) \u2014 rapid-fire golden star beams. Denken triples their damage.", color: 16765770 },
+    { id: "spell_rapid_zoltraak", name: "Rapid Zoltraak", desc: "Key 5 (hold) \u2014 a quick stream of weaker white beams. Fern doubles their output.", color: 16777215 },
+    { id: "spell_judradjim", name: "Judradjim", desc: "Key 6 \u2014 call down purple lightning that arcs through nearby enemies. Frieren doubles its damage.", color: 11032055 },
+    { id: "spell_vollzanbel", name: "Vollzanbel", desc: "Key 7 \u2014 a roaring fireblast that detonates at the target and scorches everything nearby.", color: 16738816 }
   ];
   var FRIEREN_STATS = { hp: 10500, shield: 11e3, energy: 850, speed: 98, heatCool: 180, damage: 6e3 };
   var FRIEREN_PAINT = { primary: 14412020, secondary: 4169215, emissive: 11070719 };
@@ -27838,6 +27871,23 @@
         lensCapM.position.set(0, 0, 0.25);
         weaponMount.add(lensCapM);
         barrelTipDummy.position.set(0, 0, 2.25);
+      } else if (equipped.arms === "magic_blaster_arms") {
+        const housing = new Mesh(new BoxGeometry(0.8, 0.8, 2.1), matGun);
+        weaponMount.add(housing);
+        const crystalRing = new Mesh(new TorusGeometry(0.48, 0.06, 8, 20), matEmissive);
+        crystalRing.rotation.x = Math.PI / 2;
+        crystalRing.position.z = 1.25;
+        weaponMount.add(crystalRing);
+        const crystal = new Mesh(new OctahedronGeometry(0.32, 0), matSecondary);
+        crystal.position.set(0, 0, 1.45);
+        weaponMount.add(crystal);
+        [-0.34, 0.34].forEach((px2) => {
+          const prong = new Mesh(new ConeGeometry(0.12, 0.9, 6), matDark);
+          prong.rotation.x = Math.PI / 2;
+          prong.position.set(px2, 0.12, 2.2);
+          weaponMount.add(prong);
+        });
+        barrelTipDummy.position.set(0, 0, 2.6);
       } else {
         const bodyPiece = new Mesh(new BoxGeometry(0.9, 0.9, 2), matGun);
         weaponMount.add(bodyPiece);
@@ -28001,17 +28051,23 @@
     parts.forEach((part) => {
       const card = document.createElement("div");
       const isEquipped = GAME_STATE.equipped[cat] === part.id;
-      card.className = `part-card ${isEquipped ? "equipped" : ""} ${!part.unlocked ? "locked" : ""}`;
+      const techLocked = !!part.requiresTech && !TECH_NODES.find((t) => t.id === part.requiresTech && t.unlocked);
+      card.className = `part-card ${isEquipped ? "equipped" : ""} ${!part.unlocked || techLocked ? "locked" : ""}`;
       card.innerHTML = `
                     <div class="part-title-row">
                         <span class="part-name">${part.name}</span>
-                        <span class="part-status ${isEquipped ? "status-equipped" : part.unlocked ? "status-unlocked" : "status-locked"}">
-                            ${isEquipped ? "EQUIPPED" : part.unlocked ? "SELECT" : `${part.cost} CR`}
+                        <span class="part-status ${isEquipped ? "status-equipped" : part.unlocked && !techLocked ? "status-unlocked" : "status-locked"}">
+                            ${isEquipped ? "EQUIPPED" : techLocked ? "TECH LOCKED" : part.unlocked ? "SELECT" : `${part.cost} CR`}
                         </span>
                     </div>
                     <div class="part-desc">${part.desc}</div>
                 `;
       card.onclick = () => {
+        if (techLocked) {
+          sfx("deny");
+          showFloatText("RESEARCH ARCANE BLASTER COUPLING FIRST", "#ffb700");
+          return;
+        }
         if (part.unlocked) {
           GAME_STATE.equipped[cat] = part.id;
           sfx("buy");
@@ -28086,11 +28142,17 @@
         if (!tech.unlocked && GAME_STATE.rp >= tech.cost) {
           GAME_STATE.rp -= tech.cost;
           tech.unlocked = true;
+          if (tech.id === "tech_4") {
+            const magic = PARTS_DB.arms.find((p) => p.id === "magic_blaster_arms");
+            if (magic) magic.unlocked = true;
+            showFloatText("MAGIC BLASTERS ADDED TO THE FORGE ARMS", "#c084fc");
+          }
           sfx("buy");
           saveGame();
           updateCurrencyUI();
           renderTechTree();
           refreshStatsUI();
+          renderPartList();
         } else if (!tech.unlocked) {
           sfx("deny");
           showFloatText("INSUFFICIENT RP", "#ff5533");
@@ -28098,6 +28160,17 @@
       };
       container.appendChild(card);
     });
+    const hint = document.createElement("div");
+    hint.className = "part-card";
+    hint.style.borderLeftColor = "#c084fc";
+    hint.innerHTML = `
+                <div class="part-title-row">
+                    <span class="part-name">Arcane Archive Fragment</span>
+                    <span class="part-status status-unlocked">RUMOR</span>
+                </div>
+                <div class="part-desc">Magic Blasters can be fitted in the Arms catalog after Arcane Blaster Coupling is researched. Non-mage pilots only channel basic lightning. ${arcaneSecretHint()}</div>
+            `;
+    container.appendChild(hint);
   }
   function switchTab(tabName) {
     GAME_STATE.currentTab = tabName;
@@ -28151,6 +28224,7 @@
     const frieren = isFrieren();
     document.body.classList.toggle("gojo-view", gojo);
     document.body.classList.toggle("frieren-view", frieren);
+    document.body.classList.toggle("stern-view", isStern());
     byId("part-category-selector").style.display = gojo || frieren ? "none" : "flex";
     document.querySelectorAll("#main-nav .nav-tab").forEach((btn) => {
       const onclick = btn.getAttribute("onclick") || "";
@@ -28178,7 +28252,7 @@
   var mousePos = new Vector2();
   function setupInputControls() {
     window.addEventListener("keydown", (e) => {
-      if (GAME_STATE.inBattle && ["KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "Backslash", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Numpad1", "Numpad2", "Numpad3", "Numpad4", "Numpad5", "Numpad6"].includes(e.code)) e.preventDefault();
+      if (GAME_STATE.inBattle && ["KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "Backslash", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Numpad1", "Numpad2", "Numpad3", "Numpad4", "Numpad5", "Numpad6", "Numpad7"].includes(e.code)) e.preventDefault();
       keys[e.code] = true;
       if (GAME_STATE.inBattle && e.code === "Space" && !e.repeat) tryBoostDash();
       if (GAME_STATE.inBattle && e.code === "ShiftLeft" && !e.repeat) toggleWingmanHold();
@@ -28198,6 +28272,7 @@
         else if (e.code === "Digit4" || e.code === "Numpad4") beginFrierenRapid("catastravia");
         else if (e.code === "Digit5" || e.code === "Numpad5") beginFrierenRapid("rapidZoltraak");
         else if (e.code === "Digit6" || e.code === "Numpad6") castJudradjim();
+        else if (e.code === "Digit7" || e.code === "Numpad7") castVollzanbel();
       }
     });
     window.addEventListener("keyup", (e) => {
@@ -28713,6 +28788,27 @@
     const spawnPos = getMuzzlePosition(tips);
     const fireDir = targetPoint.clone().sub(spawnPos).normalize();
     const damage = (arms?.damage || 320) * profile.damageMult;
+    if (profile.kind === "lightning") {
+      const target = frierenNearestTargetInCone(profile.range, 0.15);
+      const end = target ? target.position.clone().setY(2.7 * target.scale) : spawnPos.clone().addScaledVector(fireDir, profile.range);
+      spawnBasicLightningArc(spawnPos, end);
+      const line = new Line3(spawnPos, end);
+      const closest = new Vector3();
+      for (const enemy of [...enemyEntities]) {
+        const center = enemy.position.clone().setY(2.7 * enemy.scale);
+        line.closestPointToPoint(center, true, closest);
+        if (closest.distanceTo(center) < 2.4 + enemy.radius) {
+          applyDamageToEntity(enemy, damage, center, "normal", true);
+          enemy.stun = Math.max(enemy.stun || 0, 0.18);
+        }
+      }
+      spawnExplosionParticles(end, 11889663, 8, 16);
+      spawnHollowPurpleRing(end, 9125375, 22, 0.28, true);
+      spawnMuzzleFlash(spawnPos, fireDir, 1.2, profile.color);
+      sfx(profile.sfx);
+      cameraShake = Math.max(cameraShake, profile.recoil);
+      return;
+    }
     if (profile.kind === "grenade") {
       const shell = new Group();
       const body = new Mesh(
@@ -29470,12 +29566,12 @@
     }
     return zoltraakSigilTex;
   }
-  function makeZoltraakSigil(scale, opacity) {
+  function makeZoltraakSigil(scale, opacity, color = 16777215) {
     const tex = getZoltraakSigilTexture();
     if (!tex) return null;
     const mat = new SpriteMaterial({
       map: tex,
-      color: 16777215,
+      color,
       transparent: true,
       opacity,
       blending: AdditiveBlending,
@@ -29531,6 +29627,10 @@
     }
     frierenTimers.zoltraak = 6.5;
     getZoltraakSigilTexture();
+    const sternTint = isStern();
+    const zoltraakDamage = 26e3 * frierenSpellMultiplier("zoltraak");
+    const coreColor = sternTint ? 16757575 : 16777215;
+    const glowColor = sternTint ? 16738816 : 9431295;
     const eye = playerEntity.position.clone().setY(firstPersonView ? 4.95 : 4.2);
     const target = frierenNearestTarget(230);
     let aim = getAimPoint();
@@ -29544,14 +29644,14 @@
     group.position.copy(eye);
     group.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), dir);
     const coreMat = new MeshBasicMaterial({
-      color: 16777215,
+      color: coreColor,
       transparent: true,
       opacity: 0.95,
       blending: AdditiveBlending,
       depthWrite: false
     });
     const glowMat = new MeshBasicMaterial({
-      color: 9431295,
+      color: glowColor,
       transparent: true,
       opacity: 0.15,
       blending: AdditiveBlending,
@@ -29571,13 +29671,13 @@
     const sigils = [];
     const muzzleDist = firstPersonView ? 7 : 5.2;
     const muzzleScale = firstPersonView ? 4 : 5.2;
-    const muzzleSigil = makeZoltraakSigil(muzzleScale, 0.62);
+    const muzzleSigil = makeZoltraakSigil(muzzleScale, 0.62, sternTint ? 16757575 : 16777215);
     if (muzzleSigil) {
       muzzleSigil.position.copy(eye.clone().addScaledVector(dir, muzzleDist));
       scene.add(muzzleSigil);
       sigils.push({ sprite: muzzleSigil, baseOpacity: 0.62 });
     }
-    const impactSigil = makeZoltraakSigil(MathUtils.clamp(length * 0.13, 3, 16), 0.55);
+    const impactSigil = makeZoltraakSigil(MathUtils.clamp(length * 0.13, 3, 16), 0.55, sternTint ? 16757575 : 16777215);
     if (impactSigil) {
       impactSigil.position.copy(end.clone().addScaledVector(dir, 0.8));
       scene.add(impactSigil);
@@ -29600,20 +29700,25 @@
       const center = e.position.clone().setY(2.7 * e.scale);
       line.closestPointToPoint(center, true, closest);
       if (closest.distanceTo(center) < 3.2 + e.radius) {
-        const dmg = 26e3;
-        applyDamageToEntity(e, dmg, center, "normal", true);
-        spawnDamageNumber(Math.ceil(dmg), center, "normal");
+        applyDamageToEntity(e, zoltraakDamage, center, "normal", true);
+        spawnDamageNumber(Math.ceil(zoltraakDamage), center, "normal");
         e.stun = Math.max(e.stun || 0, 0.75);
       }
     }
-    spawnExplosionParticles(end, 16777215, 16, 34);
-    spawnExplosionParticles(end, 9431295, 10, 24);
-    spawnHollowPurpleRing(end, 16777215, 38, 0.42);
-    spawnHollowPurpleRing(end, 9431295, 26, 0.34, true);
+    const impactColor = sternTint ? 16753978 : 16777215;
+    const impactGlow = sternTint ? 16734720 : 9431295;
+    spawnExplosionParticles(end, impactColor, 16, 34);
+    spawnExplosionParticles(end, impactGlow, 10, 24);
+    spawnHollowPurpleRing(end, impactColor, 38, 0.42);
+    spawnHollowPurpleRing(end, impactGlow, 26, 0.34, true);
     cameraShake = Math.max(cameraShake, 0.85);
     gojoBloom = Math.max(gojoBloom, 0.85);
     sfx("zoltraak");
-    showFloatText("ZOLTRAAK \u2014 WHITE ANNIHILATION", "#f4fcff");
+    const amplified = frierenSpellMultiplier("zoltraak") > 1;
+    showFloatText(
+      sternTint ? "STERN \u2014 AMBER ANNIHILATION" : amplified ? "ZOLTRAAK \u2014 FERN AMPLIFIED \xD72" : "ZOLTRAAK \u2014 WHITE ANNIHILATION",
+      sternTint ? "#ffb347" : "#f4fcff"
+    );
   }
   function updateZoltraak(delta) {
     if (!frierenBeam) return;
@@ -29719,18 +29824,21 @@
   function spawnFrierenRapidVisual(mode, eye, dir, length) {
     const cfg = FRIEREN_RAPID_CONFIG[mode];
     const isCatastravia = mode === "catastravia";
+    const sternTint = mode === "rapidZoltraak" && isStern();
+    const coreColor = sternTint ? 16757575 : cfg.coreColor;
+    const glowColor = sternTint ? 16738816 : cfg.glowColor;
     const group = new Group();
     group.position.copy(eye);
     group.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), dir);
     const coreMat = new MeshBasicMaterial({
-      color: cfg.coreColor,
+      color: coreColor,
       transparent: true,
       opacity: 0.95,
       blending: isCatastravia ? NormalBlending : AdditiveBlending,
       depthWrite: false
     });
     const glowMat = new MeshBasicMaterial({
-      color: cfg.glowColor,
+      color: glowColor,
       transparent: true,
       opacity: isCatastravia ? 0.2 : 0.15,
       blending: AdditiveBlending,
@@ -29758,13 +29866,14 @@
       group.add(impact);
       stars.push({ sprite: impact, baseOpacity: 0.82 });
     } else {
-      const muzzle = makeZoltraakSigil(1.75, 0.4);
+      const sigilColor = sternTint ? 16757575 : 16777215;
+      const muzzle = makeZoltraakSigil(1.75, 0.4, sigilColor);
       if (muzzle) {
         muzzle.position.set(frierenRapidSide * 0.35, -0.08, 4);
         group.add(muzzle);
         stars.push({ sprite: muzzle, baseOpacity: 0.4 });
       }
-      const impact = makeZoltraakSigil(1.3, 0.32);
+      const impact = makeZoltraakSigil(1.3, 0.32, sigilColor);
       if (impact) {
         impact.position.set(0, 0, length);
         group.add(impact);
@@ -29790,6 +29899,7 @@
     const end = eye.clone().addScaledVector(dir, length);
     frierenRapidSide *= -1;
     spawnFrierenRapidVisual(mode, eye, dir, length);
+    const shotDamage = cfg.damage * frierenSpellMultiplier(mode);
     if (target) {
       if (mode === "rapidZoltraak") {
         const line = new Line3(eye, end);
@@ -29798,13 +29908,13 @@
           const center = e.position.clone().setY(2.7 * e.scale);
           line.closestPointToPoint(center, true, closest);
           if (closest.distanceTo(center) < 2.6 + e.radius) {
-            applyDamageToEntity(e, cfg.damage, center, "normal", true);
+            applyDamageToEntity(e, shotDamage, center, "normal", true);
             e.stun = Math.max(e.stun || 0, 0.14);
           }
         }
       } else {
         const center = target.position.clone().setY(2.7 * target.scale);
-        applyDamageToEntity(target, cfg.damage, center, "normal", true);
+        applyDamageToEntity(target, shotDamage, center, "normal", true);
         target.stun = Math.max(target.stun || 0, 0.07);
       }
     }
@@ -29878,6 +29988,19 @@
     }
   }
   var JUDRA_DJIM_CONFIG = { damage: 12e3, chainDamage: 7500, range: 260, chainRange: 34, maxChain: 4, cooldown: 9 };
+  function spawnBasicLightningArc(start, end) {
+    const group = new Group();
+    const mid = start.clone().lerp(end, 0.5);
+    group.position.copy(mid);
+    const localStart = start.clone().sub(mid);
+    const localEnd = end.clone().sub(mid);
+    const outer = judradjimLine(localStart, localEnd, 11889663, 0.92, 1, 9);
+    if (outer) group.add(outer.line);
+    const inner = judradjimLine(localStart, localEnd, 15984895, 0.9, 0.35, 9);
+    if (inner) group.add(inner.line);
+    scene.add(group);
+    particles.push({ mesh: group, vel: new Vector3(), life: 0.18, maxLife: 0.18 });
+  }
   function judradjimLine(start, end, color, opacity, jitter, segments = 10) {
     const delta = end.clone().sub(start);
     const length = delta.length();
@@ -29994,7 +30117,7 @@
       for (let i = 0; i < targets.length; i++) {
         const target = targets[i];
         const center = target.position.clone().setY(2.7 * target.scale);
-        const damage = i === 0 ? JUDRA_DJIM_CONFIG.damage : JUDRA_DJIM_CONFIG.chainDamage;
+        const damage = (i === 0 ? JUDRA_DJIM_CONFIG.damage : JUDRA_DJIM_CONFIG.chainDamage) * frierenSpellMultiplier("judradjim");
         addJudradjimGlow(group, center, i === 0 ? 7 : 5, i === 0 ? 0.32 : 0.26, glows);
         applyDamageToEntity(target, damage, center, "normal", true);
         target.stun = Math.max(target.stun || 0, i === 0 ? 0.9 : 0.45);
@@ -30009,8 +30132,9 @@
     cameraShake = Math.max(cameraShake, 1.1);
     gojoBloom = Math.max(gojoBloom, 0.7);
     sfx("judradjim");
+    const frierenAmplified = frierenSpellMultiplier("judradjim") > 1;
     showFloatText(
-      targets.length > 1 ? `JUDRA DJIM \u2014 CHAINED THROUGH ${targets.length}` : "JUDRA DJIM \u2014 PURPLE SKYFALL",
+      frierenAmplified ? `JUDRA DJIM \u2014 FRIEREN AMPLIFIED \xD72${targets.length > 1 ? ` \xB7 ${targets.length} CHAIN` : ""}` : targets.length > 1 ? `JUDRA DJIM \u2014 CHAINED THROUGH ${targets.length}` : "JUDRA DJIM \u2014 PURPLE SKYFALL",
       "#d8b4fe"
     );
   }
@@ -30036,10 +30160,78 @@
       }
     }
   }
+  var VOLLZANBEL_CONFIG = { damage: 16e3, splashDamage: 8e3, radius: 11, range: 170, cooldown: 8 };
+  function castVollzanbel() {
+    if (!playerEntity) return;
+    if (frierenTimers.vollzanbel > 0) {
+      sfx("deny");
+      showFloatText(`VOLLZANBEL RECHARGING \u2014 ${Math.ceil(frierenTimers.vollzanbel)}s`, "#ffb347");
+      return;
+    }
+    frierenTimers.vollzanbel = VOLLZANBEL_CONFIG.cooldown;
+    const target = frierenNearestTarget(VOLLZANBEL_CONFIG.range);
+    let impact = target ? target.position.clone().setY(2.7 * target.scale) : getAimPoint();
+    const origin = playerEntity.position.clone().setY(firstPersonView ? 4.95 : 4.2);
+    const toImpact = impact.clone().sub(origin);
+    if (toImpact.length() > VOLLZANBEL_CONFIG.range) {
+      impact = origin.clone().addScaledVector(toImpact.normalize(), VOLLZANBEL_CONFIG.range);
+    }
+    const fireColor = 16738816;
+    const fireGlow = 16757575;
+    const blastMat = new MeshBasicMaterial({
+      color: fireColor,
+      transparent: true,
+      opacity: 0.95,
+      blending: AdditiveBlending,
+      depthWrite: false
+    });
+    const blast = new Mesh(new SphereGeometry(1.1, 16, 12), blastMat);
+    blast.position.copy(impact);
+    scene.add(blast);
+    particles.push({ mesh: blast, vel: new Vector3(), life: 0.5, maxLife: 0.5, scaleRate: 28, fade: true });
+    const shellMat = new MeshBasicMaterial({
+      color: fireGlow,
+      transparent: true,
+      opacity: 0.35,
+      blending: AdditiveBlending,
+      depthWrite: false
+    });
+    const shell = new Mesh(new SphereGeometry(2.1, 18, 14), shellMat);
+    shell.position.copy(impact);
+    scene.add(shell);
+    particles.push({ mesh: shell, vel: new Vector3(), life: 0.42, maxLife: 0.42, scaleRate: 16, fade: true });
+    const pillarMat = new MeshBasicMaterial({
+      color: fireColor,
+      transparent: true,
+      opacity: 0.54,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      side: DoubleSide
+    });
+    const pillar = new Mesh(new CylinderGeometry(0.9, 3.4, 22, 16, 1, true), pillarMat);
+    pillar.position.copy(impact).setY(impact.y + 10);
+    scene.add(pillar);
+    particles.push({ mesh: pillar, vel: new Vector3(0, 6, 0), life: 0.55, maxLife: 0.55, fade: true });
+    spawnExplosionParticles(impact, fireColor, 30, 38);
+    spawnExplosionParticles(impact, fireGlow, 16, 26);
+    spawnHollowPurpleRing(impact, fireColor, 54, 0.55, true);
+    spawnHollowPurpleRing(impact.clone().setY(0.35), fireGlow, 68, 0.48);
+    if (target) {
+      const center = target.position.clone().setY(2.7 * target.scale);
+      applyDamageToEntity(target, VOLLZANBEL_CONFIG.damage, center, "normal", true);
+      target.stun = Math.max(target.stun || 0, 0.8);
+    }
+    applySplashDamage(impact, VOLLZANBEL_CONFIG.radius, VOLLZANBEL_CONFIG.splashDamage, target || void 0);
+    cameraShake = Math.max(cameraShake, 1.25);
+    gojoBloom = Math.max(gojoBloom, 1);
+    sfx("vollzanbel");
+    showFloatText(target ? "VOLLZANBEL \u2014 FIREBLAST" : "VOLLZANBEL \u2014 SCORCHED AIR", "#ffb347");
+  }
   function makeHexShieldMaterials() {
+    const sternTint = isStern();
     return {
       fill: new MeshBasicMaterial({
-        color: 2067455,
+        color: sternTint ? 16734720 : 2067455,
         transparent: true,
         opacity: 0.28,
         side: DoubleSide,
@@ -30047,7 +30239,7 @@
         fog: false
       }),
       edge: new LineBasicMaterial({
-        color: 12448767,
+        color: sternTint ? 16761963 : 12448767,
         transparent: true,
         opacity: 0.95,
         fog: false
@@ -30101,9 +30293,10 @@
       edgeMat: mats.edge,
       hitFlash: 0
     };
-    spawnHollowPurpleRing(center, 5556479, 32, 0.45, true);
+    const shieldAccent = isStern() ? 16742936 : 5556479;
+    spawnHollowPurpleRing(center, shieldAccent, 32, 0.45, true);
     sfx("shield");
-    showFloatText("HEX SHIELD \u2014 FORWARD BARRIER", "#bdefff");
+    showFloatText(isStern() ? "STERN \u2014 AMBER HEX SHIELD" : "HEX SHIELD \u2014 FORWARD BARRIER", isStern() ? "#ffc46b" : "#bdefff");
   }
   function castFrierenSphereShield() {
     if (!playerEntity) return;
@@ -30116,11 +30309,12 @@
     const center = playerEntity.position.clone().setY(3.6);
     const group = new Group();
     group.position.copy(center);
+    const sternTint = isStern();
     const mats = makeHexShieldMaterials();
     mats.fill.blending = NormalBlending;
-    mats.fill.color.setHex(677375);
+    mats.fill.color.setHex(sternTint ? 12730636 : 677375);
     mats.fill.opacity = 0.2;
-    mats.edge.color.setHex(7331071);
+    mats.edge.color.setHex(sternTint ? 16761963 : 7331071);
     mats.edge.opacity = 0.65;
     const hexGeo = new CircleGeometry(1.25, 6);
     const edgeGeo = new EdgesGeometry(hexGeo);
@@ -30143,7 +30337,7 @@
     const aura = new Mesh(
       new SphereGeometry(4.78, 20, 14),
       new MeshBasicMaterial({
-        color: 1994751,
+        color: sternTint ? 16738816 : 1994751,
         transparent: true,
         opacity: 0.04,
         side: DoubleSide,
@@ -30164,9 +30358,9 @@
       edgeMat: mats.edge,
       hitFlash: 0
     };
-    spawnHollowPurpleRing(center.clone().setY(0.35), 5556479, 42, 0.5, true);
+    spawnHollowPurpleRing(center.clone().setY(0.35), sternTint ? 16742936 : 5556479, 42, 0.5, true);
     sfx("shield");
-    showFloatText("SPHERICAL HEX SHIELD \u2014 SEALED", "#bdefff");
+    showFloatText(sternTint ? "STERN \u2014 AMBER SPHERE SHIELD" : "SPHERICAL HEX SHIELD \u2014 SEALED", sternTint ? "#ffc46b" : "#bdefff");
   }
   function disposeFrierenShield(state) {
     scene.remove(state.group);
@@ -30220,7 +30414,7 @@
       const shield = frierenSphereShield;
       if (to.distanceTo(shield.center) < shield.radius + 0.8) {
         shield.hitFlash = 0.35;
-        spawnExplosionParticles(to.clone(), 9431295, 5, 8);
+        spawnExplosionParticles(to.clone(), isStern() ? 16742936 : 9431295, 5, 8);
         sfx("shieldhit");
         return true;
       }
@@ -30234,7 +30428,7 @@
         const hit = from.clone().lerp(to, t);
         if (hit.distanceTo(shield.center) < shield.radius) {
           shield.hitFlash = 0.45;
-          spawnExplosionParticles(hit, 9431295, 6, 10);
+          spawnExplosionParticles(hit, isStern() ? 16742936 : 9431295, 6, 10);
           sfx("shieldhit");
           return true;
         }
@@ -30256,12 +30450,14 @@
     set("catastravia", frierenRapidMode === "catastravia" ? "FIRING" : frierenTimers.catastravia > 0 ? `${Math.ceil(frierenTimers.catastravia)}s` : "READY", frierenTimers.catastravia > 0, frierenRapidMode === "catastravia");
     set("rapid", frierenRapidMode === "rapidZoltraak" ? "FIRING" : frierenTimers.rapidZoltraak > 0 ? `${Math.ceil(frierenTimers.rapidZoltraak)}s` : "READY", frierenTimers.rapidZoltraak > 0, frierenRapidMode === "rapidZoltraak");
     set("judradjim", frierenTimers.judradjim > 0 ? `${Math.ceil(frierenTimers.judradjim)}s` : "READY", frierenTimers.judradjim > 0);
+    set("vollzanbel", frierenTimers.vollzanbel > 0 ? `${Math.ceil(frierenTimers.vollzanbel)}s` : "READY", frierenTimers.vollzanbel > 0);
   }
   function updateFrierenTechniques(delta) {
     frierenTimers.zoltraak = Math.max(0, frierenTimers.zoltraak - delta);
     frierenTimers.shield = Math.max(0, frierenTimers.shield - delta);
     frierenTimers.sphere = Math.max(0, frierenTimers.sphere - delta);
     frierenTimers.judradjim = Math.max(0, frierenTimers.judradjim - delta);
+    frierenTimers.vollzanbel = Math.max(0, frierenTimers.vollzanbel - delta);
     updateZoltraak(delta);
     updateFrierenShields(delta);
     updateFrierenRapid(delta);
@@ -30297,7 +30493,7 @@
     frierenRapidShots = [];
     for (const bolt of judradjimBolts) disposeJudradjimBolt(bolt);
     judradjimBolts = [];
-    frierenTimers = { zoltraak: 0, shield: 0, sphere: 0, catastravia: 0, rapidZoltraak: 0, judradjim: 0 };
+    frierenTimers = { zoltraak: 0, shield: 0, sphere: 0, catastravia: 0, rapidZoltraak: 0, judradjim: 0, vollzanbel: 0 };
   }
   function gojoNearestTarget(maxDist) {
     if (!playerEntity) return null;
