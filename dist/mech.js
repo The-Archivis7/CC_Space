@@ -30011,7 +30011,7 @@
           const ez = e.position.z - prev.z;
           const t = MathUtils.clamp((ex * sx + ey * sy + ez * sz) / lenSq, 0, 1);
           const dx = ex - sx * t, dy = ey - sy * t, dz = ez - sz * t;
-          const rr = e.radius + 1.7;
+          const rr = e.radius + 1.7 * (orb.max ? 3 : 1);
           if (dx * dx + dy * dy + dz * dz < rr * rr && t < bestT) {
             bestT = t;
             hit = true;
