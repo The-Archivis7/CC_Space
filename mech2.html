@@ -423,7 +423,7 @@
             border-color: #fff;
         }
 
-        #gojo-abilities {
+        #gojo-abilities, #frieren-abilities {
             display: none;
             position: absolute; left: 50%; bottom: 122px;
             transform: translateX(-50%);
@@ -433,7 +433,8 @@
             pointer-events: none;
         }
         body.gojo-view #gojo-abilities { display: flex; }
-        body.fp-view #gojo-abilities { bottom: 205px; }
+        body.frieren-view #frieren-abilities { display: flex; }
+        body.fp-view #gojo-abilities, body.fp-view #frieren-abilities { bottom: 205px; }
         .gojo-ab {
             display: grid; grid-template-columns: 13px 1fr; grid-template-rows: auto auto;
             column-gap: 4px; align-items: center;
@@ -470,6 +471,12 @@
         #gab-max { border-left-color: #ffb700; }
         #gab-max.firing { border-color: #ffb700; box-shadow: 0 0 12px rgba(255,183,0,0.55); }
         body.max-output #gojo-abilities { filter: drop-shadow(0 0 8px rgba(255,183,0,0.35)); }
+        #fab-zoltraak { border-left-color: #f5fbff; }
+        #fab-hex { border-left-color: #57c8ff; }
+        #fab-sphere { border-left-color: #2d9cff; }
+        #fab-zoltraak.firing { border-color: #f5fbff; box-shadow: 0 0 14px rgba(245,251,255,0.7); }
+        #fab-hex.firing, #fab-sphere.firing { border-color: #57c8ff; box-shadow: 0 0 12px rgba(87,200,255,0.55); }
+        body.frieren-view #frieren-abilities { filter: drop-shadow(0 0 8px rgba(87,200,255,0.24)); }
 
         #domain-overlay {
             position: absolute; inset: 0; z-index: 0;
@@ -1232,6 +1239,11 @@
                 <div class="gojo-ab" id="gab-limitless"><b>4</b><span>Infinity</span><i id="gab-limitless-state">ON</i></div>
                 <div class="gojo-ab" id="gab-domain"><b>5</b><span>Domain</span><i id="gab-domain-state">READY</i></div>
                 <div class="gojo-ab" id="gab-max"><b>6</b><span>Max Output</span><i id="gab-max-state">OFF</i></div>
+            </div>
+            <div id="frieren-abilities">
+                <div class="gojo-ab" id="fab-zoltraak"><b>1</b><span>Zoltraak</span><i id="fab-zoltraak-state">READY</i></div>
+                <div class="gojo-ab" id="fab-hex"><b>2</b><span>Hex Shield</span><i id="fab-hex-state">READY</i></div>
+                <div class="gojo-ab" id="fab-sphere"><b>3</b><span>Sphere Shield</span><i id="fab-sphere-state">READY</i></div>
             </div>
         </div>
 

@@ -15943,6 +15943,85 @@
   var _v1$1 = new Vector3();
   var _normal = new Vector3();
   var _triangle = new Triangle();
+  var EdgesGeometry = class extends BufferGeometry {
+    constructor(geometry, thresholdAngle) {
+      super();
+      this.type = "EdgesGeometry";
+      this.parameters = {
+        thresholdAngle
+      };
+      thresholdAngle = thresholdAngle !== void 0 ? thresholdAngle : 1;
+      if (geometry.isGeometry === true) {
+        console.error("THREE.EdgesGeometry no longer supports THREE.Geometry. Use THREE.BufferGeometry instead.");
+        return;
+      }
+      const precisionPoints = 4;
+      const precision = Math.pow(10, precisionPoints);
+      const thresholdDot = Math.cos(DEG2RAD * thresholdAngle);
+      const indexAttr = geometry.getIndex();
+      const positionAttr = geometry.getAttribute("position");
+      const indexCount = indexAttr ? indexAttr.count : positionAttr.count;
+      const indexArr = [0, 0, 0];
+      const vertKeys = ["a", "b", "c"];
+      const hashes = new Array(3);
+      const edgeData = {};
+      const vertices = [];
+      for (let i = 0; i < indexCount; i += 3) {
+        if (indexAttr) {
+          indexArr[0] = indexAttr.getX(i);
+          indexArr[1] = indexAttr.getX(i + 1);
+          indexArr[2] = indexAttr.getX(i + 2);
+        } else {
+          indexArr[0] = i;
+          indexArr[1] = i + 1;
+          indexArr[2] = i + 2;
+        }
+        const { a, b, c } = _triangle;
+        a.fromBufferAttribute(positionAttr, indexArr[0]);
+        b.fromBufferAttribute(positionAttr, indexArr[1]);
+        c.fromBufferAttribute(positionAttr, indexArr[2]);
+        _triangle.getNormal(_normal);
+        hashes[0] = `${Math.round(a.x * precision)},${Math.round(a.y * precision)},${Math.round(a.z * precision)}`;
+        hashes[1] = `${Math.round(b.x * precision)},${Math.round(b.y * precision)},${Math.round(b.z * precision)}`;
+        hashes[2] = `${Math.round(c.x * precision)},${Math.round(c.y * precision)},${Math.round(c.z * precision)}`;
+        if (hashes[0] === hashes[1] || hashes[1] === hashes[2] || hashes[2] === hashes[0]) {
+          continue;
+        }
+        for (let j = 0; j < 3; j++) {
+          const jNext = (j + 1) % 3;
+          const vecHash0 = hashes[j];
+          const vecHash1 = hashes[jNext];
+          const v0 = _triangle[vertKeys[j]];
+          const v1 = _triangle[vertKeys[jNext]];
+          const hash = `${vecHash0}_${vecHash1}`;
+          const reverseHash = `${vecHash1}_${vecHash0}`;
+          if (reverseHash in edgeData && edgeData[reverseHash]) {
+            if (_normal.dot(edgeData[reverseHash].normal) <= thresholdDot) {
+              vertices.push(v0.x, v0.y, v0.z);
+              vertices.push(v1.x, v1.y, v1.z);
+            }
+            edgeData[reverseHash] = null;
+          } else if (!(hash in edgeData)) {
+            edgeData[hash] = {
+              index0: indexArr[j],
+              index1: indexArr[jNext],
+              normal: _normal.clone()
+            };
+          }
+        }
+      }
+      for (const key in edgeData) {
+        if (edgeData[key]) {
+          const { index0, index1 } = edgeData[key];
+          _v0.fromBufferAttribute(positionAttr, index0);
+          _v1$1.fromBufferAttribute(positionAttr, index1);
+          vertices.push(_v0.x, _v0.y, _v0.z);
+          vertices.push(_v1$1.x, _v1$1.y, _v1$1.z);
+        }
+      }
+      this.setAttribute("position", new Float32BufferAttribute(vertices, 3));
+    }
+  };
   var Earcut = {
     triangulate: function(data, holeIndices, dim) {
       dim = dim || 2;
@@ -25779,6 +25858,13 @@
   var gojoMaxOutput = false;
   var purpleAudio = null;
   var gojoTimers = { blue: 0, red: 0, purple: 0, domain: 0 };
+  var frierenBeam = null;
+  var frierenFrontShield = null;
+  var frierenSphereShield = null;
+  var frierenTimers = { zoltraak: 0, shield: 0, sphere: 0 };
+  var zoltraakSigilTex = null;
+  var zoltraakSigilRequested = false;
+  var bossThemeAudio = null;
   var gojoInfinityOn = true;
   var gojoInfinityFx = 0;
   var gojoBloom = 0;
@@ -25960,6 +26046,19 @@
         tone(1180, 0.16, "sawtooth", 0.055, 760);
         noise(0.14, 0.06, 5200);
         break;
+      case "zoltraak":
+        tone(1760, 0.38, "sawtooth", 0.1, 420);
+        noise(0.42, 0.22, 7200);
+        tone(88, 0.34, "sine", 0.18, 42);
+        break;
+      case "shield":
+        tone(520, 0.22, "triangle", 0.09, 880);
+        tone(780, 0.28, "sine", 0.07, 1170);
+        break;
+      case "shieldhit":
+        tone(880, 0.08, "triangle", 0.06, 520);
+        noise(0.1, 0.05, 4200);
+        break;
     }
   }
   function sfx2tone(freq, dur, type, vol) {
@@ -26027,9 +26126,36 @@
       AudioSys.musicTimer = null;
     }
   }
+  function startBossTheme() {
+    stopMusic();
+    if (!bossThemeAudio) {
+      bossThemeAudio = new Audio("assets/songs/zoltraak.mp3");
+      bossThemeAudio.loop = true;
+      bossThemeAudio.volume = 0.34;
+      bossThemeAudio.preload = "auto";
+    }
+    bossThemeAudio.muted = AudioSys.muted;
+    bossThemeAudio.currentTime = 0;
+    const request = bossThemeAudio.play();
+    if (request && typeof request.catch === "function") {
+      request.catch(() => {
+        startMusic();
+      });
+    }
+  }
+  function stopBossTheme() {
+    if (!bossThemeAudio) return;
+    bossThemeAudio.pause();
+    bossThemeAudio.currentTime = 0;
+  }
   function toggleMute() {
     AudioSys.muted = !AudioSys.muted;
     if (AudioSys.master) AudioSys.master.gain.value = AudioSys.muted ? 0 : 0.55;
+    if (bossThemeAudio) bossThemeAudio.muted = AudioSys.muted;
+    if (!AudioSys.muted && GAME_STATE.inBattle && GAME_STATE.selectedMode === "boss" && bossThemeAudio) {
+      bossThemeAudio.play().catch(() => {
+      });
+    }
     const btn = byId("btn-audio");
     if (btn) btn.innerText = AudioSys.muted ? "\u{1F507} MUTED" : "\u{1F50A} SOUND";
   }
@@ -26148,6 +26274,10 @@
   }
   function isGojo() {
     return (GAME_STATE.username || "").trim().toLowerCase() === "gojo";
+  }
+  function isFrieren() {
+    const callsign = (GAME_STATE.username || "").trim().toLowerCase();
+    return callsign === "frieren" || callsign === "fern" || callsign === "denken";
   }
   function getBeamHeatMult() {
     const core = PARTS_DB.core.find((p) => p.id === GAME_STATE.equipped.core);
@@ -26448,6 +26578,11 @@
   }
   function damagePlayer(damage, hitPos) {
     if (!playerEntity || playerEntity.invuln > 0) return;
+    if (isFrieren() && frierenSphereShield) {
+      damage *= 0.12;
+      frierenSphereShield.hitFlash = Math.max(frierenSphereShield.hitFlash, 0.45);
+      spawnExplosionParticles(playerEntity.position.clone().setY(4), 9431295, 6, 9);
+    }
     if (isGojo() && gojoInfinityOn) {
       damage *= 0.12;
       if (gojoInfinityFx <= 0) {
@@ -26792,6 +26927,13 @@
     { id: "tech_domain", name: "Domain Expansion: Unlimited Void", desc: "Key 5 \u2014 a solid void barrier with a black hole and galaxy; traps hostiles in space.", color: 7158783 }
   ];
   var GOJO_STATS = { hp: 14e3, shield: 8e3, energy: 600, speed: 110, heatCool: 120, damage: 4500 };
+  var FRIEREN_TECHNIQUES = [
+    { id: "spell_zoltraak", name: "Zoltraak", desc: "Key 1 or LMB \u2014 a piercing white annihilation beam that tears through everything in its path.", color: 16120831 },
+    { id: "spell_hex_shield", name: "Hex Shield", desc: "Key 2 \u2014 raise a forward wall of translucent blue hexagons that absorbs incoming fire.", color: 5556479 },
+    { id: "spell_sphere_shield", name: "Spherical Hex Shield", desc: "Key 3 \u2014 seal yourself inside a rotating sphere of blue hexagons and blunt all damage.", color: 2989311 }
+  ];
+  var FRIEREN_STATS = { hp: 10500, shield: 11e3, energy: 850, speed: 98, heatCool: 180, damage: 6e3 };
+  var FRIEREN_PAINT = { primary: 14412020, secondary: 4169215, emissive: 11070719 };
   var COLOR_PALETTES = {
     primary: [2633274, 5905950, 1916462, 5127710, 988970, 4674921],
     secondary: [16733440, 61695, 16758528, 14870768, 16720452, 65382],
@@ -27753,13 +27895,17 @@
     });
     return mech;
   }
+  function getActivePilotPaint() {
+    return isFrieren() ? FRIEREN_PAINT : GAME_STATE.paint;
+  }
   function updateGarageMechDisplay() {
     if (garageMechMesh) scene.remove(garageMechMesh);
-    garageMechMesh = createProceduralMechMesh(GAME_STATE.equipped, GAME_STATE.paint);
+    garageMechMesh = createProceduralMechMesh(GAME_STATE.equipped, getActivePilotPaint());
     scene.add(garageMechMesh);
   }
   function calculateMechStats() {
     if (isGojo()) return { ...GOJO_STATS };
+    if (isFrieren()) return { ...FRIEREN_STATS };
     let hp = 0, shield = 0, energy = 0, speed = 0, heatCool = 0, damage = 0;
     Object.keys(GAME_STATE.equipped).forEach((cat) => {
       const partId = GAME_STATE.equipped[cat];
@@ -27793,7 +27939,7 @@
     byId("stat-speed-bar").style.width = `${Math.min(100, stats.speed / 100 * 100)}%`;
     byId("stat-heat-bar").style.width = `${Math.min(100, stats.heatCool / 120 * 100)}%`;
     const cls = stats.hp > 5500 ? "SIEGE" : stats.speed > 70 ? "RECON" : "CUSTOM";
-    byId("mech-class-name").innerText = `${cls} CHASSIS`;
+    byId("mech-class-name").innerText = isFrieren() ? "ARCANE FRAME" : `${cls} CHASSIS`;
   }
   function selectPartCategory(cat) {
     GAME_STATE.activePartCategory = cat;
@@ -27805,8 +27951,9 @@
   function renderPartList() {
     const grid = byId("parts-list-grid");
     grid.innerHTML = "";
-    if (isGojo()) {
-      GOJO_TECHNIQUES.forEach((tech) => {
+    if (isGojo() || isFrieren()) {
+      const techniques = isFrieren() ? FRIEREN_TECHNIQUES : GOJO_TECHNIQUES;
+      techniques.forEach((tech) => {
         const card = document.createElement("div");
         card.className = "part-card equipped";
         card.style.borderLeftColor = `#${tech.color.toString(16).padStart(6, "0")}`;
@@ -27817,7 +27964,7 @@
                         </div>
                         <div class="part-desc">${tech.desc}</div>
                     `;
-        card.onclick = () => showFloatText("INNATE TECHNIQUE \u2014 ALWAYS ACTIVE", "#9fe8ff");
+        card.onclick = () => showFloatText(isFrieren() ? "ARCANE SPELL \u2014 BOUND TO THE FRAME" : "INNATE TECHNIQUE \u2014 ALWAYS ACTIVE", "#9fe8ff");
         grid.appendChild(card);
       });
       return;
@@ -27882,15 +28029,16 @@
   function renderTechTree() {
     const container = byId("tech-nodes-list");
     container.innerHTML = "";
-    if (isGojo()) {
+    if (isGojo() || isFrieren()) {
+      const techniques = isFrieren() ? FRIEREN_TECHNIQUES : GOJO_TECHNIQUES;
       const card = document.createElement("div");
       card.className = "part-card equipped";
       card.innerHTML = `
                     <div class="part-title-row">
-                        <span class="part-name">Innate Technique Matrix</span>
+                        <span class="part-name">${isFrieren() ? "Arcane Spell Matrix" : "Innate Technique Matrix"}</span>
                         <span class="part-status status-equipped">ALL ACTIVE</span>
                     </div>
-                    <div class="part-desc">${GOJO_TECHNIQUES.map((t) => t.name.replace(/^.*: /, "")).join(" \xB7 ")}</div>
+                    <div class="part-desc">${techniques.map((t) => t.name.replace(/^.*: /, "")).join(" \xB7 ")}</div>
                 `;
       container.appendChild(card);
       return;
@@ -27973,13 +28121,16 @@
     input.value = GAME_STATE.username || "PILOT";
     byId("hud-pilot-name").innerText = GAME_STATE.username || "PILOT";
     const gojo = isGojo();
+    const frieren = isFrieren();
     document.body.classList.toggle("gojo-view", gojo);
-    byId("part-category-selector").style.display = gojo ? "none" : "flex";
+    document.body.classList.toggle("frieren-view", frieren);
+    byId("part-category-selector").style.display = gojo || frieren ? "none" : "flex";
     document.querySelectorAll("#main-nav .nav-tab").forEach((btn) => {
       const onclick = btn.getAttribute("onclick") || "";
-      if (onclick.includes("research")) btn.style.display = gojo ? "none" : "";
+      if (onclick.includes("research")) btn.style.display = gojo || frieren ? "none" : "";
     });
-    if (gojo && GAME_STATE.currentTab === "research") switchTab("garage");
+    if ((gojo || frieren) && GAME_STATE.currentTab === "research") switchTab("garage");
+    if (frieren) getZoltraakSigilTexture();
   }
   function applyPilotName() {
     const input = byId("pilot-name");
@@ -28012,6 +28163,11 @@
         else if (e.code === "Digit4" || e.code === "Numpad4") toggleGojoInfinity();
         else if (e.code === "Digit5" || e.code === "Numpad5") castGojoDomain();
         else if (e.code === "Digit6" || e.code === "Numpad6") toggleGojoMaxOutput();
+      }
+      if (GAME_STATE.inBattle && isFrieren() && !e.repeat) {
+        if (e.code === "Digit1" || e.code === "Numpad1") castZoltraak();
+        else if (e.code === "Digit2" || e.code === "Numpad2") castFrierenHexShield();
+        else if (e.code === "Digit3" || e.code === "Numpad3") castFrierenSphereShield();
       }
     });
     window.addEventListener("keyup", (e) => keys[e.code] = false);
@@ -28074,7 +28230,8 @@
       saveGame();
     }
     audioUnlock();
-    startMusic();
+    if (GAME_STATE.selectedMode === "boss") startBossTheme();
+    else startMusic();
     GAME_STATE.inBattle = true;
     GAME_STATE.survivalWave = 1;
     GAME_STATE.survivalEarnings = 0;
@@ -28102,7 +28259,7 @@
     buildArenaGraphics();
     const stats = calculateMechStats();
     playerEntity = {
-      mesh: createProceduralMechMesh(GAME_STATE.equipped, GAME_STATE.paint),
+      mesh: createProceduralMechMesh(GAME_STATE.equipped, getActivePilotPaint()),
       hp: stats.hp,
       maxHp: stats.hp,
       shield: stats.shield,
@@ -28128,6 +28285,7 @@
     playerMomentum.set(0, 0, 0);
     scene.add(playerEntity.mesh);
     if (isGojo()) clearGojoEffects();
+    if (isFrieren()) clearFrierenEffects();
     spawnEnemyWave(1);
     spawnWingmanDrone();
     byId("target-hud-card").style.opacity = "1";
@@ -28494,6 +28652,10 @@
     if (!playerEntity || playerEntity.overheated) return;
     if (isGojo()) {
       if (!gojoPurple && gojoTimers.purple <= 0) castHollowPurple();
+      return;
+    }
+    if (isFrieren()) {
+      castZoltraak();
       return;
     }
     const profile = getWeaponProfile();
@@ -29258,6 +29420,426 @@
     combo.ringB.rotation.x += delta * 10;
     combo.group.scale.setScalar(3 * (1 + Math.sin(clock.elapsedTime * 9) * 0.05));
     if (combo.timer <= 0) detonateMaxComboPurple();
+  }
+  function getZoltraakSigilTexture() {
+    if (!zoltraakSigilRequested) {
+      zoltraakSigilRequested = true;
+      new TextureLoader().load("assets/zoltraak.png", (tex) => {
+        tex.minFilter = LinearFilter;
+        tex.magFilter = LinearFilter;
+        zoltraakSigilTex = tex;
+      }, void 0, () => {
+        zoltraakSigilRequested = false;
+      });
+    }
+    return zoltraakSigilTex;
+  }
+  function makeZoltraakSigil(scale, opacity) {
+    const tex = getZoltraakSigilTexture();
+    if (!tex) return null;
+    const mat = new SpriteMaterial({
+      map: tex,
+      color: 16777215,
+      transparent: true,
+      opacity,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      depthTest: false
+    });
+    const sprite = new Sprite(mat);
+    sprite.scale.set(scale, scale, 1);
+    sprite.renderOrder = 6;
+    return sprite;
+  }
+  function frierenNearestTarget(maxDist) {
+    if (!playerEntity) return null;
+    let target = null, best = maxDist;
+    for (const e of enemyEntities) {
+      const d = e.position.distanceTo(playerEntity.position);
+      if (d < best) {
+        best = d;
+        target = e;
+      }
+    }
+    return target;
+  }
+  function frierenAimDir() {
+    if (!playerEntity) return new Vector3(0, 0, -1);
+    const eye = playerEntity.position.clone().setY(4.2);
+    const dir = getAimPoint().sub(eye);
+    if (dir.lengthSq() < 1e-3) dir.set(0, 0, -1);
+    return dir.normalize();
+  }
+  function castZoltraak() {
+    if (!playerEntity) return;
+    if (frierenTimers.zoltraak > 0) {
+      sfx("deny");
+      showFloatText(`ZOLTRAAK RECHARGING \u2014 ${Math.ceil(frierenTimers.zoltraak)}s`, "#dff7ff");
+      return;
+    }
+    frierenTimers.zoltraak = 6.5;
+    getZoltraakSigilTexture();
+    const eye = playerEntity.position.clone().setY(firstPersonView ? 4.95 : 4.2);
+    const target = frierenNearestTarget(230);
+    let aim = getAimPoint();
+    if (target) aim = target.position.clone().setY(2.7 * target.scale);
+    const dir = aim.clone().sub(eye);
+    if (dir.lengthSq() < 1e-3) dir.set(0, 0, -1);
+    dir.normalize();
+    const length = Math.max(2, Math.min(230, eye.distanceTo(aim)));
+    const end = eye.clone().addScaledVector(dir, length);
+    const group = new Group();
+    group.position.copy(eye);
+    group.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), dir);
+    const coreMat = new MeshBasicMaterial({
+      color: 16777215,
+      transparent: true,
+      opacity: 0.95,
+      blending: AdditiveBlending,
+      depthWrite: false
+    });
+    const glowMat = new MeshBasicMaterial({
+      color: 9431295,
+      transparent: true,
+      opacity: 0.15,
+      blending: AdditiveBlending,
+      depthWrite: false
+    });
+    const beamGeo = new CylinderGeometry(0.46, 0.46, length, 10, 1, true);
+    const core = new Mesh(beamGeo, coreMat);
+    core.rotation.x = Math.PI / 2;
+    core.position.z = length / 2;
+    group.add(core);
+    const glowGeo = new CylinderGeometry(1.05, 1.05, length, 10, 1, true);
+    const glow = new Mesh(glowGeo, glowMat);
+    glow.rotation.x = Math.PI / 2;
+    glow.position.z = length / 2;
+    group.add(glow);
+    scene.add(group);
+    const sigils = [];
+    const muzzleDist = firstPersonView ? 7 : 5.2;
+    const muzzleScale = firstPersonView ? 4 : 5.2;
+    const muzzleSigil = makeZoltraakSigil(muzzleScale, 0.62);
+    if (muzzleSigil) {
+      muzzleSigil.position.copy(eye.clone().addScaledVector(dir, muzzleDist));
+      scene.add(muzzleSigil);
+      sigils.push({ sprite: muzzleSigil, baseOpacity: 0.62 });
+    }
+    const impactSigil = makeZoltraakSigil(MathUtils.clamp(length * 0.13, 3, 16), 0.55);
+    if (impactSigil) {
+      impactSigil.position.copy(end.clone().addScaledVector(dir, 0.8));
+      scene.add(impactSigil);
+      sigils.push({ sprite: impactSigil, baseOpacity: 0.55 });
+    }
+    frierenBeam = {
+      group,
+      origin: eye.clone(),
+      dir: dir.clone(),
+      length,
+      life: 1.2,
+      maxLife: 1.2,
+      coreMat,
+      glowMat,
+      sigils
+    };
+    const line = new Line3(eye, end);
+    const closest = new Vector3();
+    for (const e of [...enemyEntities]) {
+      const center = e.position.clone().setY(2.7 * e.scale);
+      line.closestPointToPoint(center, true, closest);
+      if (closest.distanceTo(center) < 3.2 + e.radius) {
+        const dmg = 26e3;
+        applyDamageToEntity(e, dmg, center, "normal", true);
+        spawnDamageNumber(Math.ceil(dmg), center, "normal");
+        e.stun = Math.max(e.stun || 0, 0.75);
+      }
+    }
+    spawnExplosionParticles(end, 16777215, 16, 34);
+    spawnExplosionParticles(end, 9431295, 10, 24);
+    spawnHollowPurpleRing(end, 16777215, 38, 0.42);
+    spawnHollowPurpleRing(end, 9431295, 26, 0.34, true);
+    cameraShake = Math.max(cameraShake, 0.85);
+    gojoBloom = Math.max(gojoBloom, 0.85);
+    sfx("zoltraak");
+    showFloatText("ZOLTRAAK \u2014 WHITE ANNIHILATION", "#f4fcff");
+  }
+  function updateZoltraak(delta) {
+    if (!frierenBeam) return;
+    const beam = frierenBeam;
+    beam.life -= delta;
+    const fade = Math.max(0, beam.life / beam.maxLife);
+    beam.coreMat.opacity = 0.95 * fade;
+    beam.glowMat.opacity = 0.15 * fade;
+    for (const sig of beam.sigils) {
+      const mat = sig.sprite.material;
+      mat.rotation += delta * 3.2;
+      mat.opacity = sig.baseOpacity * Math.min(1, fade * 1.4);
+    }
+    if (beam.life <= 0) {
+      scene.remove(beam.group);
+      beam.group.traverse((o) => {
+        const mesh = o;
+        if (mesh.geometry) mesh.geometry.dispose();
+      });
+      beam.coreMat.dispose();
+      beam.glowMat.dispose();
+      for (const sig of beam.sigils) {
+        scene.remove(sig.sprite);
+        sig.sprite.material.dispose();
+      }
+      frierenBeam = null;
+    }
+  }
+  function makeHexShieldMaterials() {
+    return {
+      fill: new MeshBasicMaterial({
+        color: 2067455,
+        transparent: true,
+        opacity: 0.28,
+        side: DoubleSide,
+        depthWrite: false,
+        fog: false
+      }),
+      edge: new LineBasicMaterial({
+        color: 12448767,
+        transparent: true,
+        opacity: 0.95,
+        fog: false
+      })
+    };
+  }
+  function castFrierenHexShield() {
+    if (!playerEntity) return;
+    if (frierenTimers.shield > 0) {
+      sfx("deny");
+      showFloatText(`HEX SHIELD RECHARGING \u2014 ${Math.ceil(frierenTimers.shield)}s`, "#bdefff");
+      return;
+    }
+    frierenTimers.shield = 12;
+    const dir = frierenAimDir();
+    const center = playerEntity.position.clone().addScaledVector(dir, 5).setY(4);
+    const group = new Group();
+    group.position.copy(center);
+    group.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), dir);
+    const mats = makeHexShieldMaterials();
+    const hexGeo = new CircleGeometry(2, 6);
+    const edgeGeo = new EdgesGeometry(hexGeo);
+    const h = Math.sqrt(3) * 2;
+    const spots = [
+      [0, 0],
+      [h, 0],
+      [-h, 0],
+      [h / 2, 3],
+      [-h / 2, 3],
+      [h / 2, -3],
+      [-h / 2, -3]
+    ];
+    for (const [x, y] of spots) {
+      const panel = new Mesh(hexGeo, mats.fill);
+      panel.position.set(x, y, 0);
+      group.add(panel);
+      const edge = new LineSegments(edgeGeo, mats.edge);
+      edge.position.set(x, y, 0.02);
+      group.add(edge);
+    }
+    scene.add(group);
+    frierenFrontShield = {
+      group,
+      kind: "front",
+      center: center.clone(),
+      normal: dir.clone(),
+      radius: 7.2,
+      life: 5,
+      maxLife: 5,
+      fillMat: mats.fill,
+      edgeMat: mats.edge,
+      hitFlash: 0
+    };
+    spawnHollowPurpleRing(center, 5556479, 32, 0.45, true);
+    sfx("shield");
+    showFloatText("HEX SHIELD \u2014 FORWARD BARRIER", "#bdefff");
+  }
+  function castFrierenSphereShield() {
+    if (!playerEntity) return;
+    if (frierenTimers.sphere > 0) {
+      sfx("deny");
+      showFloatText(`SPHERICAL SHIELD RECHARGING \u2014 ${Math.ceil(frierenTimers.sphere)}s`, "#bdefff");
+      return;
+    }
+    frierenTimers.sphere = 18;
+    const center = playerEntity.position.clone().setY(3.6);
+    const group = new Group();
+    group.position.copy(center);
+    const mats = makeHexShieldMaterials();
+    mats.fill.blending = NormalBlending;
+    mats.fill.color.setHex(677375);
+    mats.fill.opacity = 0.2;
+    mats.edge.color.setHex(7331071);
+    mats.edge.opacity = 0.65;
+    const hexGeo = new CircleGeometry(1.25, 6);
+    const edgeGeo = new EdgesGeometry(hexGeo);
+    const count = 42;
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < count; i++) {
+      const y = 1 - i / (count - 1) * 2;
+      const r = Math.sqrt(Math.max(0, 1 - y * y));
+      const theta = golden * i;
+      const normal = new Vector3(Math.cos(theta) * r, y, Math.sin(theta) * r);
+      const panel = new Mesh(hexGeo, mats.fill);
+      panel.position.copy(normal).multiplyScalar(4.9);
+      panel.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), normal);
+      group.add(panel);
+      const edge = new LineSegments(edgeGeo, mats.edge);
+      edge.position.copy(panel.position).multiplyScalar(1.008);
+      edge.quaternion.copy(panel.quaternion);
+      group.add(edge);
+    }
+    const aura = new Mesh(
+      new SphereGeometry(4.78, 20, 14),
+      new MeshBasicMaterial({
+        color: 1994751,
+        transparent: true,
+        opacity: 0.04,
+        side: DoubleSide,
+        depthWrite: false
+      })
+    );
+    group.add(aura);
+    scene.add(group);
+    frierenSphereShield = {
+      group,
+      kind: "sphere",
+      center: center.clone(),
+      normal: new Vector3(0, 1, 0),
+      radius: 5.1,
+      life: 4,
+      maxLife: 4,
+      fillMat: mats.fill,
+      edgeMat: mats.edge,
+      hitFlash: 0
+    };
+    spawnHollowPurpleRing(center.clone().setY(0.35), 5556479, 42, 0.5, true);
+    sfx("shield");
+    showFloatText("SPHERICAL HEX SHIELD \u2014 SEALED", "#bdefff");
+  }
+  function disposeFrierenShield(state) {
+    scene.remove(state.group);
+    state.group.traverse((o) => {
+      const mesh = o;
+      if (mesh.geometry) mesh.geometry.dispose();
+      const materials = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+      materials.forEach((m) => m.dispose());
+    });
+  }
+  function updateFrierenShields(delta) {
+    if (!playerEntity) return;
+    if (frierenFrontShield) {
+      const shield = frierenFrontShield;
+      shield.life -= delta;
+      const dir = frierenAimDir();
+      const center = playerEntity.position.clone().addScaledVector(dir, 5).setY(4);
+      shield.group.position.copy(center);
+      shield.group.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), dir);
+      shield.center.copy(center);
+      shield.normal.copy(dir);
+      shield.hitFlash = Math.max(0, shield.hitFlash - delta * 4);
+      const fade = Math.min(1, shield.life / 0.65);
+      shield.fillMat.opacity = (0.28 + shield.hitFlash * 0.16) * fade;
+      shield.edgeMat.opacity = (0.9 + shield.hitFlash * 0.05) * fade;
+      if (shield.life <= 0) {
+        disposeFrierenShield(shield);
+        frierenFrontShield = null;
+      }
+    }
+    if (frierenSphereShield) {
+      const shield = frierenSphereShield;
+      shield.life -= delta;
+      const center = playerEntity.position.clone().setY(3.6);
+      shield.group.position.copy(center);
+      shield.center.copy(center);
+      shield.group.rotation.y += delta * 0.22;
+      shield.hitFlash = Math.max(0, shield.hitFlash - delta * 4);
+      const fade = Math.min(1, shield.life / 0.65);
+      const fpDamp = firstPersonView ? 0.55 : 1;
+      shield.fillMat.opacity = (0.2 + shield.hitFlash * 0.1) * fade * fpDamp;
+      shield.edgeMat.opacity = (0.65 + shield.hitFlash * 0.2) * fade * (firstPersonView ? 0.82 : 1);
+      if (shield.life <= 0) {
+        disposeFrierenShield(shield);
+        frierenSphereShield = null;
+      }
+    }
+  }
+  function frierenBlocksProjectile(from, to) {
+    if (frierenSphereShield) {
+      const shield = frierenSphereShield;
+      if (to.distanceTo(shield.center) < shield.radius + 0.8) {
+        shield.hitFlash = 0.35;
+        spawnExplosionParticles(to.clone(), 9431295, 5, 8);
+        sfx("shieldhit");
+        return true;
+      }
+    }
+    if (frierenFrontShield) {
+      const shield = frierenFrontShield;
+      const d0 = from.clone().sub(shield.center).dot(shield.normal);
+      const d1 = to.clone().sub(shield.center).dot(shield.normal);
+      if (d0 * d1 <= 0 && Math.abs(d0 - d1) > 1e-4) {
+        const t = d0 / (d0 - d1);
+        const hit = from.clone().lerp(to, t);
+        if (hit.distanceTo(shield.center) < shield.radius) {
+          shield.hitFlash = 0.45;
+          spawnExplosionParticles(hit, 9431295, 6, 10);
+          sfx("shieldhit");
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  function updateFrierenAbilityHUD() {
+    if (!isFrieren()) return;
+    const set = (id, text, cooling, firing = false) => {
+      const root = byId(`fab-${id}`);
+      byId(`fab-${id}-state`).innerText = text;
+      root.classList.toggle("cooling", cooling);
+      root.classList.toggle("firing", firing);
+    };
+    set("zoltraak", frierenTimers.zoltraak > 0 ? `${Math.ceil(frierenTimers.zoltraak)}s` : "READY", frierenTimers.zoltraak > 0, !!frierenBeam);
+    set("hex", frierenFrontShield ? "ACTIVE" : frierenTimers.shield > 0 ? `${Math.ceil(frierenTimers.shield)}s` : "READY", frierenTimers.shield > 0, !!frierenFrontShield);
+    set("sphere", frierenSphereShield ? "ACTIVE" : frierenTimers.sphere > 0 ? `${Math.ceil(frierenTimers.sphere)}s` : "READY", frierenTimers.sphere > 0, !!frierenSphereShield);
+  }
+  function updateFrierenTechniques(delta) {
+    frierenTimers.zoltraak = Math.max(0, frierenTimers.zoltraak - delta);
+    frierenTimers.shield = Math.max(0, frierenTimers.shield - delta);
+    frierenTimers.sphere = Math.max(0, frierenTimers.sphere - delta);
+    updateZoltraak(delta);
+    updateFrierenShields(delta);
+    updateFrierenAbilityHUD();
+  }
+  function clearFrierenEffects() {
+    if (frierenBeam) {
+      scene.remove(frierenBeam.group);
+      frierenBeam.group.traverse((o) => {
+        const mesh = o;
+        if (mesh.geometry) mesh.geometry.dispose();
+      });
+      frierenBeam.coreMat.dispose();
+      frierenBeam.glowMat.dispose();
+      for (const sig of frierenBeam.sigils) {
+        scene.remove(sig.sprite);
+        sig.sprite.material.dispose();
+      }
+      frierenBeam = null;
+    }
+    if (frierenFrontShield) {
+      disposeFrierenShield(frierenFrontShield);
+      frierenFrontShield = null;
+    }
+    if (frierenSphereShield) {
+      disposeFrierenShield(frierenSphereShield);
+      frierenSphereShield = null;
+    }
+    frierenTimers = { zoltraak: 0, shield: 0, sphere: 0 };
   }
   function gojoNearestTarget(maxDist) {
     if (!playerEntity) return null;
@@ -30294,6 +30876,7 @@
       playerEntity.shield = Math.min(playerEntity.maxShield, playerEntity.shield + regen * delta);
     }
     if (isGojo()) updateGojoTechniques(delta);
+    else if (isFrieren()) updateFrierenTechniques(delta);
     if (mouseDown) firePlayerWeapon();
     updateHeliosBeam(delta);
     const shakeX = (Math.random() - 0.5) * cameraShake;
@@ -30386,6 +30969,7 @@
       const p = projectiles[i];
       p.mesh.visible = !(firstPersonView && !p.isPlayer && p.mesh.position.distanceTo(camera.position) < 3.4);
       if (p.gravity) p.dir.y -= p.gravity * delta;
+      const prevProjectilePos = p.mesh.position.clone();
       p.mesh.position.addScaledVector(p.dir, p.speed * delta);
       if (p.dir.lengthSq() > 1e-4) p.mesh.lookAt(p.mesh.position.clone().add(p.dir));
       p.life -= delta;
@@ -30431,7 +31015,10 @@
         }
       }
       if (!hit && !p.isPlayer) {
-        if (p.mesh.position.distanceTo(playerEntity.position) < playerEntity.radius + 0.9) {
+        if (isFrieren() && frierenBlocksProjectile(prevProjectilePos, p.mesh.position)) {
+          hit = true;
+        }
+        if (!hit && p.mesh.position.distanceTo(playerEntity.position) < playerEntity.radius + 0.9) {
           damagePlayer(p.damage, p.mesh.position.clone());
           hit = true;
         }
@@ -30597,7 +31184,7 @@
     byId("hud-shield-val").innerText = `${Math.ceil(playerEntity.shield)} / ${playerEntity.maxShield}`;
     const beamActive = getWeaponProfile().kind === "beam";
     byId("hud-heat-fill").style.width = `${playerEntity.heat}%`;
-    byId("hud-heat-val").innerText = isGojo() ? gojoInfinityOn ? "\u221E INFINITY" : "\u221E RELEASED" : `${Math.ceil(playerEntity.heat)}%${playerEntity.overheated ? " \u26A0 VENTING" : beamActive ? ` \u26A1 HELIOS x${getBeamHeatMult().toFixed(2)}` : ""}`;
+    byId("hud-heat-val").innerText = isGojo() ? gojoInfinityOn ? "\u221E INFINITY" : "\u221E RELEASED" : isFrieren() ? "\u221E ARCANE CORE" : `${Math.ceil(playerEntity.heat)}%${playerEntity.overheated ? " \u26A0 VENTING" : beamActive ? ` \u26A1 HELIOS x${getBeamHeatMult().toFixed(2)}` : ""}`;
     const energyPct = playerEntity.maxEnergy > 0 ? playerEntity.energy / playerEntity.maxEnergy * 100 : 0;
     byId("hud-energy-fill").style.width = `${Math.max(0, energyPct)}%`;
     byId("hud-energy-val").innerText = `${Math.ceil(energyPct)}%`;
@@ -30630,6 +31217,9 @@
     if (isGojo()) {
       byId("fp-weapon").innerText = "LIMITLESS";
       byId("fp-weapon-state").innerText = gojoInfinityOn ? "INFINITY" : "INFINITY OFF";
+    } else if (isFrieren()) {
+      byId("fp-weapon").innerText = "ZOLTRAAK";
+      byId("fp-weapon-state").innerText = frierenTimers.zoltraak > 0 ? `RECHARGE ${Math.ceil(frierenTimers.zoltraak)}s` : "WHITE BEAM READY";
     } else {
       byId("fp-weapon").innerText = profile.label;
       byId("fp-weapon-state").innerText = playerEntity.overheated ? "THERMAL VENT" : profile.kind === "beam" ? `BEAM x${getBeamHeatMult().toFixed(2)}` : "READY";
@@ -30697,10 +31287,12 @@
     if (!GAME_STATE.inBattle) return;
     GAME_STATE.inBattle = false;
     stopMusic();
+    stopBossTheme();
     mouseDown = false;
     setFirstPerson(false, true);
     hideHeliosBeam();
     clearGojoEffects();
+    clearFrierenEffects();
     byId("hud-layer").style.display = "none";
     const modal = byId("modal-post-battle");
     const title = byId("result-title-text");
@@ -30758,6 +31350,7 @@
     destructibles = [];
     hideHeliosBeam();
     clearGojoEffects();
+    clearFrierenEffects();
     setFirstPerson(false, true);
     playerMomentum.set(0, 0, 0);
     pickupPads = [];
